@@ -16,6 +16,12 @@ RESOURCES_DIR="$CONTENTS_DIR/Resources"
 rm -rf "$BUNDLE_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
+echo "==> 拷贝应用图标..."
+if [ ! -f "$DIR/Resources/AppIcon.icns" ]; then
+  swift "$DIR/scripts/generate_icns.swift" "$DIR"
+fi
+cp -f "$DIR/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+
 echo "==> 组装 macOS App Bundle..."
 cp -f "$DIR/.build/release/$APP_NAME" "$MACOS_DIR/$APP_NAME"
 chmod +x "$MACOS_DIR/$APP_NAME"
@@ -27,6 +33,10 @@ cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
 <dict>
     <key>CFBundleExecutable</key>
     <string>ServiceHub</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.jockiller.servicehub</string>
     <key>CFBundleName</key>

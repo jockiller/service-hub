@@ -13,9 +13,15 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             // 顶部关于横幅
             HStack(spacing: 16) {
-                Image(systemName: "server.rack")
-                    .font(.system(size: 38))
-                    .foregroundColor(.accentColor)
+                if let iconImg = NSApp.applicationIconImage {
+                    Image(nsImage: iconImg)
+                        .resizable()
+                        .frame(width: 44, height: 44)
+                } else {
+                    Image(systemName: "server.rack")
+                        .font(.system(size: 38))
+                        .foregroundColor(.accentColor)
+                }
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("ServiceHub")

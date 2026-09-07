@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- 背景渐变 -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e2430" />
+      <stop offset="50%" stop-color="#141822" />
+      <stop offset="100%" stop-color="#0a0d14" />
+    </linearGradient>
+
+    <!-- 边框内发光 -->
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.25" />
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0.05" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.0" />
+    </linearGradient>
+
+    <!-- 机柜金属渐变 -->
+    <linearGradient id="rackGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2a3344" />
+      <stop offset="100%" stop-color="#181e2b" />
+    </linearGradient>
+
+    <!-- 机箱刀片单元渐变 -->
+    <linearGradient id="bladeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#242b3a" />
+      <stop offset="100%" stop-color="#151b24" />
+    </linearGradient>
+
+    <!-- 盾牌外发光滤镜 -->
+    <filter id="shieldGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#0066ff" flood-opacity="0.45" />
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#00f2fe" flood-opacity="0.3" />
+    </filter>
+
+    <!-- 盾牌主渐变 (蓝青微光科技感) -->
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe" />
+      <stop offset="30%" stop-color="#007aff" />
+      <stop offset="100%" stop-color="#0040dd" />
+    </linearGradient>
+
+    <!-- 盾牌内部半透明玻璃底色 -->
+    <linearGradient id="shieldInnerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.28" />
+      <stop offset="50%" stop-color="#007aff" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#0033aa" stop-opacity="0.35" />
+    </linearGradient>
+
+    <!-- 绿灯发光 -->
+    <filter id="greenGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#10b981" flood-opacity="0.9" />
+    </filter>
+    <filter id="blueGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#38bdf8" flood-opacity="0.9" />
+    </filter>
+  </defs>
+
+  <!-- macOS 标准圆角矩形底座 (Squircle) 尺寸 824x824 居中 (x:100, y:100) -->
+  <rect x="100" y="100" width="824" height="824" rx="188" ry="188" fill="url(#bgGrad)" />
+  <!-- 底座微光边缘边框 -->
+  <rect x="100" y="100" width="824" height="824" rx="188" ry="188" fill="none" stroke="url(#borderGrad)" stroke-width="3" />
+
+  <!-- ==================== 服务器机柜 (Server Rack) ==================== -->
+  <g id="serverRack">
+    <!-- 机柜主体外框 (略带透视的高科技机柜) -->
+    <rect x="256" y="210" width="512" height="600" rx="28" ry="28" fill="url(#rackGrad)" stroke="#38455e" stroke-width="4" />
+
+    <!-- 左右导轨装饰线条 -->
+    <line x1="288" y1="230" x2="288" y2="790" stroke="#10141c" stroke-width="4" stroke-linecap="round" />
+    <line x1="736" y1="230" x2="736" y2="790" stroke="#10141c" stroke-width="4" stroke-linecap="round" />
+
+    <!-- 顶层刀片服务器 (Unit 1) -->
+    <g id="blade1">
+      <rect x="306" y="246" width="412" height="96" rx="12" fill="url(#bladeGrad)" stroke="#2f3b52" stroke-width="2" />
+      <!-- 散热通风槽 (3组横线) -->
+      <line x1="336" y1="284" x2="490" y2="284" stroke="#10141c" stroke-width="4" stroke-linecap="round" />
+      <line x1="336" y1="304" x2="490" y2="304" stroke="#10141c" stroke-width="4" stroke-linecap="round" />
+      <!-- 指示灯组 -->
+      <circle cx="650" cy="294" r="8" fill="#10b981" filter="url(#greenGlow)" />
+      <circle cx="682" cy="294" r="6" fill="#38bdf8" filter="url(#blueGlow)" />
+    </g>
+
+    <!-- 中层刀片服务器 (Unit 2) -->
+    <g id="blade2">
+      <rect x="306" y="366" width="412" height="96" rx="12" fill="url(#bladeGrad)" stroke="#2f3b52" stroke-width="2" />
+      <!-- 散热通风槽 -->
+      <line x1="336" y1="404" x2="490" y2="404" stroke="#10141c" stroke-width="4" stroke-linecap="round" />
+      <line x1="336" y1="424" x2="490" y2="424" stroke="#10141c" stroke-width="4" stroke-linecap="round" />
+      <!-- 指示灯组 -->
+      <circle cx="650" cy="414" r="8" fill="#10b981" filter="url(#greenGlow)" />
+      <circle cx="682" cy="414" r="6" fill="#10b981" filter="url(#greenGlow)" />
+    </g>
+
+    <!-- 下层刀片服务器 (Unit 3) -->
+    <g id="blade3">
+      <rect x="306" y="486" width="412" height="96" rx="12" fill="url(#bladeGrad)" stroke="#2f3b52" stroke-width="2" />
+      <!-- 散热通风槽 -->
+      <line x1="336" y1="524" x2="490" y2="524" stroke="#10141c" stroke-width="4" stroke-linecap="round" />
+      <line x1="336" y1="544" x2="490" y2="544" stroke="#10141c" stroke-width="4" stroke-linecap="round" />
+      <!-- 指示灯组 -->
+      <circle cx="650" cy="534" r="8" fill="#38bdf8" filter="url(#blueGlow)" />
+      <circle cx="682" cy="534" r="6" fill="#10b981" filter="url(#greenGlow)" />
+    </g>
+
+    <!-- 最底层托架 (Unit 4 稳固基座) -->
+    <g id="blade4">
+      <rect x="306" y="606" width="412" height="96" rx="12" fill="url(#bladeGrad)" stroke="#2f3b52" stroke-width="2" />
+      <!-- 散热通风槽 -->
+      <line x1="336" y1="644" x2="490" y2="644" stroke="#10141c" stroke-width="4" stroke-linecap="round" />
+      <line x1="336" y1="664" x2="490" y2="664" stroke="#10141c" stroke-width="4" stroke-linecap="round" />
+      <!-- 指示灯组 -->
+      <circle cx="650" cy="654" r="8" fill="#10b981" filter="url(#greenGlow)" />
+      <circle cx="682" cy="654" r="6" fill="#f59e0b" />
+    </g>
+  </g>
+
+  <!-- ==================== 守护盾牌 (Guardian Shield) ==================== -->
+  <!-- 盾牌主体：居中偏前，半透明玻璃拟态叠加机柜，象征“守护与保活” -->
+  <g id="guardianShield" filter="url(#shieldGlow)">
+    <!-- 盾牌路径：中心位于 x:512, y:560 -->
+    <!-- 顶部宽 360，侧边向下收至锐利尖底 (512, 790) -->
+    <path d="M 512 370
+             C 590 370, 680 348, 702 334
+             C 706 440, 712 600, 512 766
+             C 312 600, 318 440, 322 334
+             C 344 348, 434 370, 512 370 Z"
+          fill="url(#shieldInnerGrad)"
+          stroke="url(#shieldGrad)"
+          stroke-width="14"
+          stroke-linejoin="round" />
+
+    <!-- 盾牌内部流光轮廓线 -->
+    <path d="M 512 396
+             C 578 396, 652 378, 672 366
+             C 676 454, 680 588, 512 730
+             C 344 588, 348 454, 352 366
+             C 372 378, 446 396, 512 396 Z"
+          fill="none"
+          stroke="#ffffff"
+          stroke-opacity="0.3"
+          stroke-width="3" />
+
+    <!-- 盾牌中心核心符号：科技脉冲心跳折线 (Pulse / Keepalive 生机符号) -->
+    <path d="M 406 550
+             L 460 550
+             L 484 492
+             L 522 612
+             L 550 528
+             L 574 550
+             L 618 550"
+          fill="none"
+          stroke="#00f2fe"
+          stroke-width="12"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          filter="url(#blueGlow)" />
+  </g>
+
+  <!-- 盾牌中心高光小圆点 -->
+  <circle cx="512" cy="560" r="4" fill="#ffffff" filter="url(#blueGlow)" />
+</svg>
