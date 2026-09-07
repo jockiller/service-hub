@@ -2,8 +2,9 @@ import Foundation
 import AppKit
 
 public final class PreconditionChecker {
-    private static var cachedWifiDev: String? = nil
+    @MainActor private static var cachedWifiDev: String? = nil
 
+    @MainActor
     private static func getWifiDevice() async -> String {
         if let dev = cachedWifiDev { return dev }
         let findDevCmd = "networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}'"
@@ -15,6 +16,7 @@ public final class PreconditionChecker {
     }
 
     /// 检查服务的前置条件是否满足
+    @MainActor
     public static func check(service: Service) async -> (isSatisfied: Bool, reason: String) {
         let param = service.preconditionParam?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 

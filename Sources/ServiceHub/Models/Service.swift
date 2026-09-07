@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-public enum ServiceStatus: String, Codable, CaseIterable {
+public enum ServiceStatus: String, Codable, CaseIterable, Sendable {
     case running = "running"
     case stopped = "stopped"
     case starting = "starting"
@@ -51,7 +51,7 @@ public enum ServiceStatus: String, Codable, CaseIterable {
     }
 }
 
-public enum PreconditionType: String, Codable, CaseIterable {
+public enum PreconditionType: String, Codable, CaseIterable, Sendable {
     case none = "none"
 
     // 网络
@@ -175,7 +175,7 @@ public enum PreconditionType: String, Codable, CaseIterable {
     }
 }
 
-public struct Service: Identifiable, Codable, Equatable, Hashable {
+public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var id: String
     public var name: String
     public var icon: String

@@ -1,7 +1,7 @@
 import Foundation
 import AppKit
 
-public struct ProbeResult {
+public struct ProbeResult: Sendable {
     public let status: ServiceStatus
     public let pid: pid_t?
     public let launchDate: Date?

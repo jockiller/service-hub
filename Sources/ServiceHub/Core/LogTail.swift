@@ -104,7 +104,7 @@ public final class LogTail: ObservableObject {
         self.watcher = FileWatcher(
             url: url,
             onAppend: { [weak self] appendedText in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     guard let self = self else { return }
                     self.logContent.append(appendedText)
                     if self.logContent.count > 300_000 {
@@ -113,7 +113,7 @@ public final class LogTail: ObservableObject {
                 }
             },
             onReset: { [weak self] in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     self?.loadLog(for: path)
                 }
             }

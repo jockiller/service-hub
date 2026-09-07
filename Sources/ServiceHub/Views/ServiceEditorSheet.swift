@@ -583,6 +583,7 @@ struct ServiceEditorSheet: View {
         statusCommand = "/opt/homebrew/bin/brew services list | grep \"\(trimmed)\" | grep started"
     }
 
+    @MainActor
     private func pickAppAction() {
         guard let meta = AppPickerHelper.pickApplication() else { return }
         id = meta.executableName.lowercased().replacingOccurrences(of: " ", with: "-")

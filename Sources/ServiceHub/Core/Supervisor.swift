@@ -32,10 +32,6 @@ public final class Supervisor: ObservableObject {
         startProbeLoop()
     }
 
-    deinit {
-        probeTimer?.invalidate()
-    }
-
     /// 启动定时后台探测循环
     public func startProbeLoop() {
         probeTimer?.invalidate()
@@ -55,15 +51,13 @@ public final class Supervisor: ObservableObject {
         triggerProbeAll()
     }
 
-    /// 彻底在后台 Task 线程池中异步探活，0 秒阻塞主线程
+    /// 异步执行服务探活
     public func triggerProbeAll() {
         let services = ServiceStore.shared.services
-        Task.detached(priority: .utility) { [weak self] in
+        Task { [weak self] in
             for s in services {
                 let probeRes = await HealthProbe.probe(service: s)
-                await MainActor.run { [weak self] in
-                    self?.applyProbeResult(probeRes, for: s)
-                }
+                self?.applyProbeResult(probeRes, for: s)
             }
         }
     }
