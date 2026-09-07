@@ -93,24 +93,36 @@ In daily software development and local DevOps, developers often manage numerous
 
 ## 🚀 Quick Start
 
-### Option 1: One-Click Build Release .app (Recommended)
+### Option 1: Download Pre-built Release (Recommended)
 
-Powered by Swift Package Manager without complicated Xcode workspace setups:
+Download the latest `.dmg` installer from [GitHub Releases](https://github.com/jockiller/service-hub/releases):
+1. Open the `.dmg` image;
+2. Drag **ServiceHub** into the **Applications** folder;
+3. **First-launch Notice**: As an open-source app without an expensive Apple commercial certificate, if macOS Gatekeeper blocks opening with "unidentified developer" or "damaged", simply run this command once in Terminal:
+   ```bash
+   xattr -cr /Applications/ServiceHub.app
+   ```
+   Or right-click the app in Finder and choose **Open**.
+
+---
+
+### Option 2: Local Build, Codesign & DMG Creation
 
 ```bash
 # 1. Clone repository
 git clone git@github.com:jockiller/service-hub.git
 cd service-hub
 
-# 2. Run the release build script
-./scripts/build_app.sh
+# 2. Build, perform ad-hoc codesign, and generate compressed DMG
+./scripts/create_dmg.sh 1.0.0
 
-# 3. Launch application
-open build/ServiceHub.app
+# 3. Output files generated under build/
+open build/ServiceHub-1.0.0-macOS.dmg
 ```
-You can drag `build/ServiceHub.app` to `/Applications` for permanent use in Dock and Launchpad.
 
-### Option 2: Run directly with SwiftPM
+---
+
+### Option 3: Run directly with SwiftPM
 
 ```bash
 swift run

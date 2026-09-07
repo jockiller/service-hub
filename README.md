@@ -93,24 +93,38 @@
 
 ## 🚀 快速开始
 
-### 方式 1：一键编译打包 Release .app（推荐）
+### 方式 1：直接下载安装包（推荐）
 
-本项目使用标准 Swift Package Manager 驱动，无需繁琐的 Xcode 复杂工程配置：
+从 [GitHub Releases](https://github.com/jockiller/service-hub/releases) 页面下载最新版的 `.dmg` 安装镜像：
+1. 双击打开 `.dmg` 文件；
+2. 将 **ServiceHub** 拖拽至 **Applications**（应用程序）目录；
+3. **首次打开说明**：因开源软件未购买苹果昂贵的商业开发者证书，若系统提示“无法验证开发者”或“已损坏”，只需打开系统「终端」运行一次以下信任命令即可：
+   ```bash
+   xattr -cr /Applications/ServiceHub.app
+   ```
+   或者：按住 `Control` 键右键点击应用图标 -> 选择“打开”。
+
+---
+
+### 方式 2：本地一键编译打包 Release .dmg
+
+本项目使用标准 Swift Package Manager 驱动，无需配置复杂的 Xcode 工程：
 
 ```bash
 # 1. 克隆代码仓库
 git clone git@github.com:jockiller/service-hub.git
 cd service-hub
 
-# 2. 运行一键构建与打包脚本
-./scripts/build_app.sh
+# 2. 一键编译、代码签名并生成 DMG 安装镜像
+./scripts/create_dmg.sh 1.0.0
 
-# 3. 启动应用
-open build/ServiceHub.app
+# 3. 产物生成于 build/ 目录下
+open build/ServiceHub-1.0.0-macOS.dmg
 ```
-编译完成后，你可以将 `build/ServiceHub.app` 拖入 `/Applications` 文件夹，即可在访达与 Dock 栏中随时使用。
 
-### 方式 2：使用 SwiftPM 直接调试运行
+---
+
+### 方式 3：使用 SwiftPM 直接开发调试
 
 ```bash
 swift run

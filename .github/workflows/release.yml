@@ -1,0 +1,76 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本号 (如 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Release macOS App
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Resolve Version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building ServiceHub Version: ${VERSION}"
+
+      - name: Build, Sign & Package DMG
+        run: |
+          chmod +x scripts/*.sh
+          ./scripts/create_dmg.sh "${{ steps.get_version.outputs.VERSION }}"
+
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          cat << 'EOF' > release_notes.md
+          ### 🚀 ServiceHub ${{ steps.get_version.outputs.VERSION }} 发布
+
+          一款专为 macOS 设计的现代化本地服务可视化管理工具与守护引擎。
+          统一纳管 Shell 脚本、Homebrew 服务、macOS 原生应用程序 (.app) 与 Docker 容器。
+
+          #### 📦 下载安装
+          - **DMG 镜像 (推荐)**: 下载 `.dmg` 文件，双击打开并将 `ServiceHub` 拖入 `Applications` 应用程序文件夹即可。
+          - **ZIP 便携包**: 解压后拖入 `Applications`。
+
+          #### ⚠️ 首次打开提示“无法验证开发者”或“已损坏”解决方法
+          本项目为免费开源软件，未购买苹果每年的付费开发者证书。若首次打开时系统拦截提示，请打开系统**终端 (Terminal)** 运行以下命令：
+          ```bash
+          xattr -cr /Applications/ServiceHub.app
+          ```
+          执行后即可秒开正常使用！
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ServiceHub v${{ steps.get_version.outputs.VERSION }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            build/ServiceHub-*-macOS.dmg
+            build/ServiceHub-*-macOS.dmg.sha256
+            build/ServiceHub-*-macOS.zip
+            build/ServiceHub-*-macOS.zip.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
