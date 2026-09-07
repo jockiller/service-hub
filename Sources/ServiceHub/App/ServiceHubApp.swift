@@ -4,6 +4,7 @@ import SwiftUI
 struct ServiceHubApp: App {
     @StateObject private var store = ServiceStore.shared
     @StateObject private var supervisor = Supervisor.shared
+    @StateObject private var settings = AppSettings.shared
 
     var body: some Scene {
         // 主程序窗口
@@ -21,8 +22,8 @@ struct ServiceHubApp: App {
             SettingsView()
         }
 
-        // 顶部菜单栏常驻图标 (现代化 Popover Window 风格)
-        MenuBarExtra {
+        // 顶部菜单栏常驻图标 (支持 isInserted 动态显隐开关)
+        MenuBarExtra(isInserted: $settings.showMenuBarIcon) {
             MenuBarView()
         } label: {
             let hasError = store.services.contains(where: { supervisor.statuses[$0.id] == .failed })
