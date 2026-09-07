@@ -15,16 +15,23 @@ struct ServiceEditorSheet: View {
     @State private var logPath: String = ""
     @State private var healthCheckURL: String = ""
 
-    @State private var selectedTemplate: Int = 0 // 0: 自定义脚本, 1: Homebrew 服务
-    @State private var brewServiceName: String = ""
+    // 0: 自定义脚本/命令, 1: Homebrew 服务, 2: 选取 macOS 应用程序
+    @State private var selectedTemplate: Int = 0
 
+    // Homebrew 扫描状态
+    @State private var scannedBrewServices: [BrewServiceItem] = []
+    @State private var isScanningBrew = false
+    @State private var selectedBrewItem: BrewServiceItem? = nil
+
+    // 测试运行状态
     @State private var isTesting = false
     @State private var testOutput: String? = nil
 
     private let availableIcons = [
         "gearshape", "bolt.fill", "network", "cylinder.split.1x2.fill",
-        "antenna.radiowaves.left.and.right", "server.rack", "shield.fill",
-        "cpu", "memorychip", "terminal.fill", "globe", "leaf.fill"
+        "cylinder.fill", "antenna.radiowaves.left.and.right", "server.rack",
+        "shield.fill", "cpu", "memorychip", "terminal.fill", "globe",
+        "app.fill", "tray.2.fill", "macwindow"
     ]
 
     init(serviceToEdit: Service? = nil, onSave: @escaping (Service) -> Void) {
@@ -34,7 +41,7 @@ struct ServiceEditorSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // 头部
+            // 顶部标题
             HStack {
                 Text(serviceToEdit == nil ? "添加新服务" : "编辑服务: \(serviceToEdit!.name)")
                     .font(.headline)
@@ -48,48 +55,108 @@ struct ServiceEditorSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // 模板选择（仅新建时显示）
+                    // 模板选择（仅新建模式下展示）
                     if serviceToEdit == nil {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("快速模板")
+                            Text("快速接入方式")
                                 .font(.subheadline).foregroundColor(.secondary)
                             Picker("", selection: $selectedTemplate) {
-                                Text("自定义脚本 / 程序").tag(0)
+                                Text("自定义脚本 / 命令").tag(0)
                                 Text("Homebrew 服务").tag(1)
+                                Text("选取应用程序 (.app)").tag(2)
                             }
                             .pickerStyle(.segmented)
                             .onChange(of: selectedTemplate) { val in
-                                applyTemplate(val)
+                                handleTemplateChange(val)
                             }
                         }
 
+                        // 模板 1: Homebrew 扫描面板
                         if selectedTemplate == 1 {
-                            HStack {
-                                TextField("Homebrew 服务名 (如 redis, mariadb, nginx)", text: $brewServiceName)
-                                    .textFieldStyle(.roundedBorder)
-                                Button("应用配置") {
-                                    applyBrewService()
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("已扫描到本地 Brew 服务:")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Button(action: scanBrewServices) {
+                                        if isScanningBrew {
+                                            ProgressView().controlSize(.small)
+                                        } else {
+                                            Label("重新扫描", systemImage: "arrow.triangle.2.circlepath")
+                                                .font(.caption)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .disabled(brewServiceName.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                                if isScanningBrew {
+                                    HStack {
+                                        ProgressView().controlSize(.small)
+                                        Text("正在扫描本地已安装的 Homebrew 服务...")
+                                            .font(.caption).foregroundColor(.secondary)
+                                    }
+                                    .padding(.vertical, 4)
+                                } else if scannedBrewServices.isEmpty {
+                                    Text("未检测到本地已安装的 Homebrew 服务（或 brew 未安装）")
+                                        .font(.caption).foregroundColor(.secondary)
+                                } else {
+                                    Picker("选择服务:", selection: $selectedBrewItem) {
+                                        Text("—— 请选择要纳管的 Brew 服务 ——").tag(BrewServiceItem?.none)
+                                        ForEach(scannedBrewServices, id: \.self) { item in
+                                            Text("\(item.name) (\(item.isStarted ? "运行中" : "已停止"))").tag(BrewServiceItem?.some(item))
+                                        }
+                                    }
+                                    .onChange(of: selectedBrewItem) { item in
+                                        if let item = item {
+                                            applyBrewItem(item)
+                                        }
+                                    }
+                                }
                             }
+                            .padding(10)
+                            .background(Color(NSColor.controlBackgroundColor))
+                            .cornerRadius(8)
+                        }
+
+                        // 模板 2: 选取应用程序面板
+                        if selectedTemplate == 2 {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text("选取本地已安装的 macOS 应用程序")
+                                            .font(.system(size: 13, weight: .medium))
+                                        Text("自动提取应用名称、可执行文件并生成启动、停止与存活检测命令")
+                                            .font(.caption).foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Button(action: pickAppAction) {
+                                        Label("浏览应用程序...", systemImage: "macwindow")
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                }
+                            }
+                            .padding(12)
+                            .background(Color.accentColor.opacity(0.08))
+                            .cornerRadius(8)
                         }
                     }
 
-                    // 基本信息
+                    // 基础信息字段
                     VStack(alignment: .leading, spacing: 10) {
                         Text("基础信息")
                             .font(.subheadline).foregroundColor(.secondary)
 
                         HStack {
                             Text("服务标识 (ID):").frame(width: 110, alignment: .trailing)
-                            TextField("如 gpt-load, frpc", text: $id)
+                            TextField("如 gpt-load, frpc, redis", text: $id)
                                 .textFieldStyle(.roundedBorder)
                                 .disabled(serviceToEdit != nil)
                         }
 
                         HStack {
                             Text("显示名称:").frame(width: 110, alignment: .trailing)
-                            TextField("如 GPT-Load 服务", text: $name)
+                            TextField("如 GPT-Load 代理网关", text: $name)
                                 .textFieldStyle(.roundedBorder)
                         }
 
@@ -104,35 +171,45 @@ struct ServiceEditorSheet: View {
                         }
 
                         HStack {
-                            Text("开机/启动自启:").frame(width: 110, alignment: .trailing)
-                            Toggle("程序启动后自动拉起并守护", isOn: $autoStart)
+                            Text("自启与守护:").frame(width: 110, alignment: .trailing)
+                            Toggle("ServiceHub 启动时自动拉起，并在异常退出时自动恢复", isOn: $autoStart)
                         }
                     }
 
                     Divider()
 
-                    // 控制命令
+                    // 控制与状态命令
                     VStack(alignment: .leading, spacing: 10) {
                         Text("控制与状态命令")
                             .font(.subheadline).foregroundColor(.secondary)
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("启动命令:").frame(width: 110, alignment: .trailing)
-                                TextField("必填，如 /path/to/start.sh 或 brew services start xxx", text: $startCommand)
-                                    .textFieldStyle(.roundedBorder)
+                        HStack {
+                            Text("启动命令:").frame(width: 110, alignment: .trailing)
+                            TextField("必填，如 /path/run.sh start 或 open -a App", text: $startCommand)
+                                .textFieldStyle(.roundedBorder)
+                            Button("浏览文件...") {
+                                if let path = AppPickerHelper.pickFile(title: "选择启动脚本或程序") {
+                                    startCommand = path
+                                }
                             }
+                            .buttonStyle(.bordered)
                         }
 
                         HStack {
                             Text("停止命令:").frame(width: 110, alignment: .trailing)
-                            TextField("选填，如 /path/to/stop.sh", text: $stopCommand)
+                            TextField("选填，如 /path/run.sh stop 或 killall App", text: $stopCommand)
                                 .textFieldStyle(.roundedBorder)
+                            Button("浏览文件...") {
+                                if let path = AppPickerHelper.pickFile(title: "选择停止脚本") {
+                                    stopCommand = path
+                                }
+                            }
+                            .buttonStyle(.bordered)
                         }
 
                         HStack {
                             Text("状态检测命令:").frame(width: 110, alignment: .trailing)
-                            TextField("选填，返回 0 表示正常运行", text: $statusCommand)
+                            TextField("选填，退出码为 0 则视为正在运行", text: $statusCommand)
                                 .textFieldStyle(.roundedBorder)
                         }
                     }
@@ -146,8 +223,14 @@ struct ServiceEditorSheet: View {
 
                         HStack {
                             Text("日志文件路径:").frame(width: 110, alignment: .trailing)
-                            TextField("选填，如 /var/log/xxx.log 或 /Users/.../app.log", text: $logPath)
+                            TextField("选填，如 /Users/.../app.log", text: $logPath)
                                 .textFieldStyle(.roundedBorder)
+                            Button("浏览日志...") {
+                                if let path = AppPickerHelper.pickFile(title: "选择日志文件") {
+                                    logPath = path
+                                }
+                            }
+                            .buttonStyle(.bordered)
                         }
 
                         HStack {
@@ -157,7 +240,7 @@ struct ServiceEditorSheet: View {
                         }
                     }
 
-                    // 测试运行区
+                    // 启动命令测试运行区
                     if !startCommand.trimmingCharacters(in: .whitespaces).isEmpty {
                         Divider()
                         VStack(alignment: .leading, spacing: 8) {
@@ -177,7 +260,7 @@ struct ServiceEditorSheet: View {
                             }
 
                             if let output = testOutput {
-                                Text("测试输出:")
+                                Text("测试返回:")
                                     .font(.caption).foregroundColor(.secondary)
                                 ScrollView {
                                     Text(output)
@@ -201,7 +284,7 @@ struct ServiceEditorSheet: View {
             // 底部保存按钮
             HStack {
                 Spacer()
-                Button("保存") {
+                Button("保存配置") {
                     saveAction()
                 }
                 .buttonStyle(.borderedProminent)
@@ -211,7 +294,7 @@ struct ServiceEditorSheet: View {
             }
             .padding()
         }
-        .frame(minWidth: 540, minHeight: 580)
+        .frame(minWidth: 580, minHeight: 620)
         .onAppear {
             if let s = serviceToEdit {
                 id = s.id
@@ -227,23 +310,45 @@ struct ServiceEditorSheet: View {
         }
     }
 
-    private func applyTemplate(_ val: Int) {
-        if val == 0 {
-            // 自定义脚本
+    private func handleTemplateChange(_ val: Int) {
+        if val == 1 {
+            icon = "server.rack"
+            scanBrewServices()
+        } else if val == 2 {
+            icon = "app.fill"
+            pickAppAction()
+        } else {
             icon = "gearshape"
-        } else if val == 1 {
-            icon = "cylinder.split.1x2.fill"
         }
     }
 
-    private func applyBrewService() {
-        let trimmed = brewServiceName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+    private func scanBrewServices() {
+        isScanningBrew = true
+        Task {
+            let list = await BrewScanner.scanInstalledServices()
+            isScanningBrew = false
+            scannedBrewServices = list
+        }
+    }
+
+    private func applyBrewItem(_ item: BrewServiceItem) {
+        let trimmed = item.name
         id = trimmed
         name = "\(trimmed.capitalized) (Homebrew)"
+        icon = item.recommendedIcon
         startCommand = "/opt/homebrew/bin/brew services start \(trimmed)"
         stopCommand = "/opt/homebrew/bin/brew services stop \(trimmed)"
-        statusCommand = "/opt/homebrew/bin/brew services list | grep \(trimmed) | grep started"
+        statusCommand = "/opt/homebrew/bin/brew services list | grep \"\(trimmed)\" | grep started"
+    }
+
+    private func pickAppAction() {
+        guard let meta = AppPickerHelper.pickApplication() else { return }
+        id = meta.executableName.lowercased().replacingOccurrences(of: " ", with: "-")
+        name = meta.appName
+        icon = "app.fill"
+        startCommand = meta.recommendedStartCmd
+        stopCommand = meta.recommendedStopCmd
+        statusCommand = meta.recommendedStatusCmd
     }
 
     private func testRunCommand() {
