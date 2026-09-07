@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct ServiceListView: View {
     let services: [Service]
     let selectedId: String?

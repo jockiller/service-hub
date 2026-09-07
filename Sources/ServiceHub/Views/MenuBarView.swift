@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct MenuBarView: View {
     @ObservedObject var store = ServiceStore.shared
     @ObservedObject var supervisor = Supervisor.shared

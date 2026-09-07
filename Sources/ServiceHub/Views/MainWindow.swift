@@ -20,6 +20,7 @@ enum ViewMode: String, CaseIterable {
     }
 }
 
+@MainActor
 struct MainWindow: View {
     @ObservedObject var store = ServiceStore.shared
     @ObservedObject var supervisor = Supervisor.shared

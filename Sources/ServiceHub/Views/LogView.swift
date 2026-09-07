@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct LogView: View {
     let service: Service
     @StateObject private var logTail = LogTail()

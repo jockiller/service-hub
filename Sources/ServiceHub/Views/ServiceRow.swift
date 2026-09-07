@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct ServiceRow: View {
     let service: Service
     @ObservedObject var supervisor = Supervisor.shared

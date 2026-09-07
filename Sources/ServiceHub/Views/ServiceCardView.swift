@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct ServiceCardView: View {
     let service: Service
     let isSelected: Bool

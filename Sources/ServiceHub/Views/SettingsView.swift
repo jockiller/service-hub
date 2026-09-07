@@ -1,6 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+@MainActor
 struct SettingsView: View {
     @ObservedObject var settings = AppSettings.shared
     @ObservedObject var store = ServiceStore.shared

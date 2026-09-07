@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct ServiceEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     let serviceToEdit: Service?
