@@ -194,29 +194,7 @@ struct MainWindow: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 140)
-            }
-
-            ToolbarItem(placement: .principal) {
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.secondary)
-                    TextField("搜索服务名称、ID...", text: $searchText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12))
-                    if !searchText.isEmpty {
-                        Button(action: { searchText = "" }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(6)
-                .frame(minWidth: 200, maxWidth: 300)
+                .frame(width: 130)
             }
 
             ToolbarItemGroup(placement: .primaryAction) {
@@ -247,6 +225,7 @@ struct MainWindow: View {
                 .help("工具与配置备份")
             }
         }
+        .searchable(text: $searchText, placement: .toolbar, prompt: "搜索服务名称或 ID...")
         .sheet(isPresented: $showAddSheet) {
             ServiceEditorSheet { newService in
                 store.addService(newService)
