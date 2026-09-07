@@ -1,11 +1,24 @@
 import Foundation
 import SwiftUI
 
+public struct ServiceRuntimeInfo {
+    public var status: ServiceStatus = .unknown
+    public var pid: pid_t? = nil
+    public var uptime: String? = nil
+
+    public init(status: ServiceStatus = .unknown, pid: pid_t? = nil, uptime: String? = nil) {
+        self.status = status
+        self.pid = pid
+        self.uptime = uptime
+    }
+}
+
 @MainActor
 public final class Supervisor: ObservableObject {
     public static let shared = Supervisor()
 
     @Published public var statuses: [String: ServiceStatus] = [:]
+    @Published public var runtimes: [String: ServiceRuntimeInfo] = [:]
     @Published public var isBusy: [String: Bool] = [:]
     @Published public var lastOutputs: [String: String] = [:]
 
@@ -23,7 +36,7 @@ public final class Supervisor: ObservableObject {
     /// 启动定时后台探测循环
     public func startProbeLoop() {
         probeTimer?.invalidate()
-        probeTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true) { [weak self] _ in
+        probeTimer = Timer.scheduledTimer(withTimeInterval: 6.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 await self?.probeAllServices()
             }
@@ -41,24 +54,36 @@ public final class Supervisor: ObservableObject {
             // 如果用户正在对其执行操作（如启动中/停止中），跳过本次后台轮询
             if isBusy[s.id] == true { continue }
 
-            let status = await HealthProbe.probe(service: s)
-            if status != .unknown {
-                let prevStatus = self.statuses[s.id]
-                self.statuses[s.id] = status
+            let probeRes = await HealthProbe.probe(service: s)
+            applyProbeResult(probeRes, for: s)
+        }
+    }
 
-                // 如果服务配置了自启动，但发现停止了，且之前不是手动停止
-                if s.autoStart && status == .stopped && prevStatus == .running {
-                    let failures = consecutiveFailures[s.id, default: 0]
-                    if failures < 3 {
-                        consecutiveFailures[s.id] = failures + 1
-                        print("[Supervisor] 检测到服务 \(s.name) 异常退出，正在自动重拉 (第 \(failures + 1) 次)...")
-                        await startService(s)
-                    } else {
-                        self.statuses[s.id] = .failed
+    private func applyProbeResult(_ res: ProbeResult, for service: Service) {
+        if res.status != .unknown {
+            let prevStatus = self.statuses[service.id]
+            self.statuses[service.id] = res.status
+            self.runtimes[service.id] = ServiceRuntimeInfo(
+                status: res.status,
+                pid: res.status == .running ? res.pid : nil,
+                uptime: res.status == .running ? res.uptimeString : nil
+            )
+
+            // 如果服务配置了自启动，但发现停止了，且之前不是手动停止
+            if service.autoStart && res.status == .stopped && prevStatus == .running {
+                let failures = consecutiveFailures[service.id, default: 0]
+                if failures < 3 {
+                    consecutiveFailures[service.id] = failures + 1
+                    print("[Supervisor] 检测到服务 \(service.name) 异常退出，正在自动重拉 (第 \(failures + 1) 次)...")
+                    Task {
+                        await startService(service)
                     }
-                } else if status == .running {
-                    consecutiveFailures[s.id] = 0
+                } else {
+                    self.statuses[service.id] = .failed
+                    self.runtimes[service.id]?.status = .failed
                 }
+            } else if res.status == .running {
+                consecutiveFailures[service.id] = 0
             }
         }
     }
@@ -67,14 +92,21 @@ public final class Supervisor: ObservableObject {
     public func startService(_ service: Service) async {
         isBusy[service.id] = true
         statuses[service.id] = .starting
+        runtimes[service.id]?.status = .starting
 
         let result = await ProcessRunner.run(command: service.startCommand, timeout: 30)
         lastOutputs[service.id] = result.output
 
         // 启动后等待 1 秒，让进程稳定，然后探活
         try? await Task.sleep(nanoseconds: 1_000_000_000)
-        let newStatus = await HealthProbe.probe(service: service)
-        statuses[service.id] = (newStatus == .unknown ? (result.isSuccess ? .running : .failed) : newStatus)
+        let probeRes = await HealthProbe.probe(service: service)
+        let finalStatus = (probeRes.status == .unknown ? (result.isSuccess ? .running : .failed) : probeRes.status)
+        statuses[service.id] = finalStatus
+        runtimes[service.id] = ServiceRuntimeInfo(
+            status: finalStatus,
+            pid: finalStatus == .running ? probeRes.pid : nil,
+            uptime: finalStatus == .running ? probeRes.uptimeString : nil
+        )
         isBusy[service.id] = false
     }
 
@@ -87,13 +119,20 @@ public final class Supervisor: ObservableObject {
 
         isBusy[service.id] = true
         statuses[service.id] = .stopping
+        runtimes[service.id]?.status = .stopping
 
         let result = await ProcessRunner.run(command: stopCmd, timeout: 20)
         lastOutputs[service.id] = result.output
 
         try? await Task.sleep(nanoseconds: 800_000_000)
-        let newStatus = await HealthProbe.probe(service: service)
-        statuses[service.id] = (newStatus == .unknown ? (result.isSuccess ? .stopped : .failed) : newStatus)
+        let probeRes = await HealthProbe.probe(service: service)
+        let finalStatus = (probeRes.status == .unknown ? (result.isSuccess ? .stopped : .failed) : probeRes.status)
+        statuses[service.id] = finalStatus
+        runtimes[service.id] = ServiceRuntimeInfo(
+            status: finalStatus,
+            pid: finalStatus == .running ? probeRes.pid : nil,
+            uptime: nil
+        )
         isBusy[service.id] = false
     }
 
@@ -112,10 +151,8 @@ public final class Supervisor: ObservableObject {
     /// 单个服务主动探活
     public func probeService(_ service: Service) async {
         isBusy[service.id] = true
-        let status = await HealthProbe.probe(service: service)
-        if status != .unknown {
-            statuses[service.id] = status
-        }
+        let probeRes = await HealthProbe.probe(service: service)
+        applyProbeResult(probeRes, for: service)
         isBusy[service.id] = false
     }
 }
