@@ -155,4 +155,24 @@ public final class Supervisor: ObservableObject {
         applyProbeResult(probeRes, for: service)
         isBusy[service.id] = false
     }
+
+    /// 全部启动
+    public func startAllServices() async {
+        let services = ServiceStore.shared.services
+        for s in services {
+            if statuses[s.id] != .running {
+                await startService(s)
+            }
+        }
+    }
+
+    /// 全部停止
+    public func stopAllServices() async {
+        let services = ServiceStore.shared.services
+        for s in services {
+            if statuses[s.id] == .running {
+                await stopService(s)
+            }
+        }
+    }
 }
