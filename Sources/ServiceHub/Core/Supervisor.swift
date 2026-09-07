@@ -41,24 +41,30 @@ public final class Supervisor: ObservableObject {
         probeTimer?.invalidate()
         probeTimer = Timer.scheduledTimer(withTimeInterval: 6.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                await self?.probeAllServices()
+                self?.triggerProbeAll()
             }
         }
-        // 立即触发首次检测
-        Task {
-            await probeAllServices()
+        // 延迟 0.3 秒触发首次检测，避免阻塞窗口首帧启动
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.triggerProbeAll()
         }
     }
 
     /// 对所有已登记服务执行探活
     public func probeAllServices() async {
-        let services = ServiceStore.shared.services
-        for s in services {
-            // 如果用户正在对其执行操作（如启动中/停止中），跳过本次后台轮询
-            if isBusy[s.id] == true { continue }
+        triggerProbeAll()
+    }
 
-            let probeRes = await HealthProbe.probe(service: s)
-            applyProbeResult(probeRes, for: s)
+    /// 彻底在后台 Task 线程池中异步探活，0 秒阻塞主线程
+    public func triggerProbeAll() {
+        let services = ServiceStore.shared.services
+        Task.detached(priority: .utility) { [weak self] in
+            for s in services {
+                let probeRes = await HealthProbe.probe(service: s)
+                await MainActor.run { [weak self] in
+                    self?.applyProbeResult(probeRes, for: s)
+                }
+            }
         }
     }
 

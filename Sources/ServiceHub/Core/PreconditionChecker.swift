@@ -2,6 +2,18 @@ import Foundation
 import AppKit
 
 public final class PreconditionChecker {
+    private static var cachedWifiDev: String? = nil
+
+    private static func getWifiDevice() async -> String {
+        if let dev = cachedWifiDev { return dev }
+        let findDevCmd = "networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}'"
+        let devRes = await ProcessRunner.run(command: findDevCmd, timeout: 2)
+        let dev = devRes.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = dev.isEmpty ? "en0" : dev
+        cachedWifiDev = resolved
+        return resolved
+    }
+
     /// 检查服务的前置条件是否满足
     public static func check(service: Service) async -> (isSatisfied: Bool, reason: String) {
         let param = service.preconditionParam?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -22,14 +34,9 @@ public final class PreconditionChecker {
             return !res.isSuccess ? (true, "当前处于离线模式") : (false, "等待网络断开")
 
         case .wifiConnected:
-            // 动态定位 Wi-Fi 硬件接口名 (避免写死 en0)
-            let findDevCmd = "networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}'"
-            let devRes = await ProcessRunner.run(command: findDevCmd, timeout: 2)
-            let dev = devRes.output.trimmingCharacters(in: .whitespacesAndNewlines)
-            let targetDev = dev.isEmpty ? "en0" : dev
-
+            let targetDev = await getWifiDevice()
             let wifiCmd = "networksetup -getairportnetwork \(targetDev) 2>/dev/null"
-            let wifiRes = await ProcessRunner.run(command: wifiCmd, timeout: 3)
+            let wifiRes = await ProcessRunner.run(command: wifiCmd, timeout: 2)
             if wifiRes.output.contains("Current Wi-Fi Network:") {
                 let parts = wifiRes.output.components(separatedBy: "Current Wi-Fi Network:")
                 let currentSSID = parts.last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -48,13 +55,9 @@ public final class PreconditionChecker {
             }
 
         case .wifiDisconnected:
-            let findDevCmd = "networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}'"
-            let devRes = await ProcessRunner.run(command: findDevCmd, timeout: 2)
-            let dev = devRes.output.trimmingCharacters(in: .whitespacesAndNewlines)
-            let targetDev = dev.isEmpty ? "en0" : dev
-
+            let targetDev = await getWifiDevice()
             let wifiCmd = "networksetup -getairportnetwork \(targetDev) 2>/dev/null"
-            let wifiRes = await ProcessRunner.run(command: wifiCmd, timeout: 3)
+            let wifiRes = await ProcessRunner.run(command: wifiCmd, timeout: 2)
             if !wifiRes.output.contains("Current Wi-Fi Network:") {
                 return (true, "Wi-Fi 未连接")
             } else {

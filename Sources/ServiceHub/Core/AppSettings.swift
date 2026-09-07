@@ -21,14 +21,21 @@ public final class AppSettings: ObservableObject {
 
     public init() {
         checkLaunchAtLoginStatus()
-        applyDockActivationPolicy()
+        if hideDockIcon {
+            DispatchQueue.main.async { [weak self] in
+                self?.applyDockActivationPolicy()
+            }
+        }
     }
 
     public func applyDockActivationPolicy() {
-        if hideDockIcon {
-            NSApp.setActivationPolicy(.accessory)
-        } else {
-            NSApp.setActivationPolicy(.regular)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if self.hideDockIcon {
+                NSApp.setActivationPolicy(.accessory)
+            } else {
+                NSApp.setActivationPolicy(.regular)
+            }
         }
     }
 
