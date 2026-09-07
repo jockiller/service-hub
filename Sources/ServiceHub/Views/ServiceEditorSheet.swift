@@ -10,6 +10,8 @@ struct ServiceEditorSheet: View {
     @State private var icon: String = "gearshape"
     @State private var appPath: String = ""
     @State private var autoStart: Bool = true
+    @State private var maxRestarts: Int = 3
+    @State private var restartWindowSeconds: Int = 60
     @State private var precondition: PreconditionType = .none
     @State private var preconditionParam: String = ""
     @State private var startCommand: String = ""
@@ -200,6 +202,27 @@ struct ServiceEditorSheet: View {
                         HStack {
                             Text("自启与守护:").frame(width: 110, alignment: .trailing)
                             Toggle("ServiceHub 启动时自动拉起，并在异常退出时自动恢复", isOn: $autoStart)
+                        }
+
+                        if autoStart {
+                            HStack(spacing: 8) {
+                                Text("短时间熔断:").frame(width: 110, alignment: .trailing)
+                                Text("在")
+                                Stepper("\(restartWindowSeconds) 秒内", value: $restartWindowSeconds, in: 10...600, step: 10)
+                                    .frame(width: 120)
+                                Text("连续重试超")
+                                Stepper("\(maxRestarts) 次", value: $maxRestarts, in: 1...10)
+                                    .frame(width: 90)
+                                Text("则停止保活")
+                            }
+                            .font(.system(size: 12))
+
+                            HStack {
+                                Spacer().frame(width: 110)
+                                Text("若短时间内频繁崩溃达到该上限，将自动暂停保活防止拖垮系统，直到手动启动成功")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
                         }
 
                         HStack(alignment: .top) {
@@ -395,6 +418,8 @@ struct ServiceEditorSheet: View {
                 icon = s.icon
                 appPath = s.appPath ?? ""
                 autoStart = s.autoStart
+                maxRestarts = s.maxRestarts
+                restartWindowSeconds = s.restartWindowSeconds
                 precondition = s.precondition
                 preconditionParam = s.preconditionParam ?? ""
                 startCommand = s.startCommand
@@ -465,6 +490,8 @@ struct ServiceEditorSheet: View {
             icon: icon,
             appPath: appPath.isEmpty ? nil : appPath.trimmingCharacters(in: .whitespacesAndNewlines),
             autoStart: autoStart,
+            maxRestarts: maxRestarts,
+            restartWindowSeconds: restartWindowSeconds,
             precondition: precondition,
             preconditionParam: preconditionParam.isEmpty ? nil : preconditionParam.trimmingCharacters(in: .whitespacesAndNewlines),
             startCommand: startCommand.trimmingCharacters(in: .whitespacesAndNewlines),

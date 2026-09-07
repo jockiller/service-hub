@@ -23,7 +23,10 @@ public final class Supervisor: ObservableObject {
     @Published public var lastOutputs: [String: String] = [:]
 
     private var probeTimer: Timer?
-    private var consecutiveFailures: [String: Int] = [:]
+    /// 记录各服务在短时间内的自动重启尝试时间戳，用于滑动时间窗口熔断
+    private var restartTimestamps: [String: [Date]] = [:]
+    /// 记录各服务是否已被熔断暂停保活
+    @Published public var isCircuitBroken: [String: Bool] = [:]
 
     public init() {
         startProbeLoop()
@@ -82,19 +85,41 @@ public final class Supervisor: ObservableObject {
 
             // 如果服务配置了自启动，但发现停止了，且之前不是手动停止
             if service.autoStart && res.status == .stopped && prevStatus == .running {
-                let failures = consecutiveFailures[service.id, default: 0]
-                if failures < 3 {
-                    consecutiveFailures[service.id] = failures + 1
-                    print("[Supervisor] 检测到服务 \(service.name) 异常退出，正在自动重拉 (第 \(failures + 1) 次)...")
+                // 检查是否已被熔断暂停
+                if isCircuitBroken[service.id] == true {
+                    self.statuses[service.id] = .failed
+                    self.runtimes[service.id]?.status = .failed
+                    return
+                }
+
+                let now = Date()
+                let window = TimeInterval(service.restartWindowSeconds)
+                var history = restartTimestamps[service.id, default: []].filter { now.timeIntervalSince($0) <= window }
+
+                if history.count >= service.maxRestarts {
+                    // 触发熔断保护：在指定时间窗口内连续失败达到上限，暂停自动保活
+                    isCircuitBroken[service.id] = true
+                    self.statuses[service.id] = .failed
+                    let failReason = "已熔断: \(service.restartWindowSeconds)s内失败\(history.count)次，已停保活"
+                    self.runtimes[service.id] = ServiceRuntimeInfo(
+                        status: .failed,
+                        pid: nil,
+                        uptime: failReason
+                    )
+                    lastOutputs[service.id] = "服务在 \(service.restartWindowSeconds) 秒内连续重启达到 \(service.maxRestarts) 次上限，已暂停自动保活保护系统。请排查原因后手动点击启动恢复。"
+                    print("[-] [Supervisor] 服务 \(service.name) \(failReason)")
+                } else {
+                    history.append(now)
+                    restartTimestamps[service.id] = history
+                    print("[Supervisor] 检测到服务 \(service.name) 异常退出，正在自动重拉 (\(service.restartWindowSeconds)s内第 \(history.count)/\(service.maxRestarts) 次)...")
                     Task {
                         await startService(service)
                     }
-                } else {
-                    self.statuses[service.id] = .failed
-                    self.runtimes[service.id]?.status = .failed
                 }
             } else if res.status == .running {
-                consecutiveFailures[service.id] = 0
+                // 运行正常，恢复重试计数与熔断状态
+                restartTimestamps[service.id] = []
+                isCircuitBroken[service.id] = false
             }
         }
     }
@@ -102,6 +127,9 @@ public final class Supervisor: ObservableObject {
     /// 启动单个服务
     public func startService(_ service: Service) async {
         isBusy[service.id] = true
+
+        // 用户主动或触发启动时，解除该服务的熔断标记
+        isCircuitBroken[service.id] = false
 
         // 1. 启动前先检查前置条件（如：是否已连入外网/Wi-Fi）
         let preCheck = await PreconditionChecker.check(service: service)

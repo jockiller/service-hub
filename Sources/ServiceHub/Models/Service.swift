@@ -181,6 +181,8 @@ public struct Service: Identifiable, Codable, Equatable, Hashable {
     public var icon: String
     public var appPath: String?
     public var autoStart: Bool
+    public var maxRestarts: Int
+    public var restartWindowSeconds: Int
     public var precondition: PreconditionType
     public var preconditionParam: String?
     public var startCommand: String
@@ -195,6 +197,8 @@ public struct Service: Identifiable, Codable, Equatable, Hashable {
         icon: String = "gearshape",
         appPath: String? = nil,
         autoStart: Bool = true,
+        maxRestarts: Int = 3,
+        restartWindowSeconds: Int = 60,
         precondition: PreconditionType = .none,
         preconditionParam: String? = nil,
         startCommand: String,
@@ -208,6 +212,8 @@ public struct Service: Identifiable, Codable, Equatable, Hashable {
         self.icon = icon
         self.appPath = appPath
         self.autoStart = autoStart
+        self.maxRestarts = maxRestarts
+        self.restartWindowSeconds = restartWindowSeconds
         self.precondition = precondition
         self.preconditionParam = preconditionParam
         self.startCommand = startCommand
@@ -224,6 +230,8 @@ public struct Service: Identifiable, Codable, Equatable, Hashable {
         self.icon = try container.decodeIfPresent(String.self, forKey: .icon) ?? "gearshape"
         self.appPath = try container.decodeIfPresent(String.self, forKey: .appPath)
         self.autoStart = try container.decodeIfPresent(Bool.self, forKey: .autoStart) ?? true
+        self.maxRestarts = try container.decodeIfPresent(Int.self, forKey: .maxRestarts) ?? 3
+        self.restartWindowSeconds = try container.decodeIfPresent(Int.self, forKey: .restartWindowSeconds) ?? 60
         self.precondition = try container.decodeIfPresent(PreconditionType.self, forKey: .precondition) ?? .none
         self.preconditionParam = try container.decodeIfPresent(String.self, forKey: .preconditionParam)
         self.startCommand = try container.decode(String.self, forKey: .startCommand)

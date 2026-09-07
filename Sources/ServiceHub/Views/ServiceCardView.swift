@@ -10,10 +10,20 @@ struct ServiceCardView: View {
     @ObservedObject var supervisor = Supervisor.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // 顶部：图标 + 状态徽章 + 忙碌转轮
-            HStack(alignment: .top) {
-                ServiceIconView(service: service, size: 36)
+        VStack(alignment: .leading, spacing: 9) {
+            // 头部：左侧[图标 + 大名称/小ID]  右侧[状态Badge]
+            HStack(alignment: .center, spacing: 10) {
+                ServiceIconView(service: service, size: 34)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(service.name)
+                        .font(.system(size: 14, weight: .bold))
+                        .lineLimit(1)
+                    Text(service.id)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
 
                 Spacer()
 
@@ -21,70 +31,70 @@ struct ServiceCardView: View {
                     ProgressView()
                         .controlSize(.small)
                 } else {
-                    // 状态 Badge
-                    HStack(spacing: 5) {
+                    HStack(spacing: 4) {
                         Circle()
                             .fill(currentStatus.color)
-                            .frame(width: 7, height: 7)
+                            .frame(width: 6, height: 6)
                         Text(currentStatus.displayName)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundColor(currentStatus.color)
                     }
-                    .padding(.horizontal, 7)
+                    .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(currentStatus.color.opacity(0.12))
-                    .cornerRadius(8)
+                    .cornerRadius(6)
                 }
             }
 
-            // 中部：服务名称与 ID
-            VStack(alignment: .leading, spacing: 2) {
-                Text(service.name)
-                    .font(.system(size: 14, weight: .semibold))
-                    .lineLimit(1)
-                Text(service.id)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-            }
-
-            // 核心指标：PID 与 启动时间 / 运行时长
-            HStack(spacing: 12) {
+            // 中部指标：PID、运行时长、熔断提示、前置条件标签
+            HStack(spacing: 8) {
                 if let pid = runtimeInfo.pid, currentStatus == .running {
-                    Label("PID: \(pid)", systemImage: "cpu")
-                        .font(.system(size: 11, design: .monospaced))
+                    Label("\(pid)", systemImage: "cpu")
+                        .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(.primary)
-                } else {
-                    Label("PID: --", systemImage: "cpu")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.secondary)
                 }
 
                 if let uptime = runtimeInfo.uptime, currentStatus == .running {
                     Label(uptime, systemImage: "clock")
-                        .font(.system(size: 11))
+                        .font(.system(size: 10))
                         .foregroundColor(.secondary)
-                }
-
-                if currentStatus == .waitingPrecondition {
+                        .lineLimit(1)
+                } else if currentStatus == .waitingPrecondition {
                     Label(runtimeInfo.uptime ?? "等待条件", systemImage: "hourglass")
                         .font(.system(size: 10))
                         .foregroundColor(.orange)
-                } else if service.precondition != .none && currentStatus != .running {
-                    Text("[\(service.precondition.shortName)]")
+                        .lineLimit(1)
+                } else if supervisor.isCircuitBroken[service.id] == true {
+                    Label("已暂停保活", systemImage: "exclamationmark.octagon.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.red)
+                } else if currentStatus == .stopped {
+                    Text("未运行")
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 }
+
+                Spacer()
+
+                if service.precondition != .none && currentStatus != .running {
+                    Text(service.precondition.shortName)
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.1))
+                        .cornerRadius(4)
+                }
             }
-            .padding(.vertical, 2)
+            .frame(height: 18)
 
             Divider()
 
-            // 底部快捷操作栏
+            // 底部快捷操作按钮栏
             HStack(spacing: 6) {
                 if currentStatus == .running {
                     Button(action: { Task { await supervisor.stopService(service) } }) {
-                        Label("停止", systemImage: "stop.fill")
+                        Label("关闭", systemImage: "stop.fill")
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.bordered)
@@ -125,20 +135,22 @@ struct ServiceCardView: View {
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 12))
+                        .foregroundColor(.secondary)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
-                .frame(width: 22)
+                .frame(width: 20, height: 20)
             }
         }
-        .padding(12)
+        .padding(11)
+        // 核心视觉：根据运行状态与未运行状态做鲜明高对比底色
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color(NSColor.controlBackgroundColor))
+                .fill(cardBackgroundColor)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.18), lineWidth: isSelected ? 2 : 1)
+                .stroke(cardBorderColor, lineWidth: isSelected ? 2 : 1)
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -156,5 +168,40 @@ struct ServiceCardView: View {
 
     private var isBusy: Bool {
         supervisor.isBusy[service.id] == true
+    }
+
+    /// 根据运行中/已停止等状态分配高对比度底色
+    private var cardBackgroundColor: Color {
+        switch currentStatus {
+        case .running:
+            // 运行中：带有轻微清爽的翡翠绿/强调色呼吸感底色
+            return Color.green.opacity(0.06).opacity(1.0)
+        case .waitingPrecondition:
+            // 等待前置条件：带有温和的暖橙色底色
+            return Color.orange.opacity(0.06)
+        case .failed:
+            // 异常/熔断：微淡红色底色
+            return Color.red.opacity(0.07)
+        default:
+            // 已停止/未启动：采用中性暗灰/低调底色，与运行状态形成极强反差
+            return Color(NSColor.windowBackgroundColor).opacity(0.65)
+        }
+    }
+
+    /// 边框描边颜色
+    private var cardBorderColor: Color {
+        if isSelected {
+            return Color.accentColor
+        }
+        switch currentStatus {
+        case .running:
+            return Color.green.opacity(0.28)
+        case .waitingPrecondition:
+            return Color.orange.opacity(0.3)
+        case .failed:
+            return Color.red.opacity(0.35)
+        default:
+            return Color.secondary.opacity(0.12)
+        }
     }
 }
