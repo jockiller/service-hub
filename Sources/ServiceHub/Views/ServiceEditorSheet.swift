@@ -10,6 +10,8 @@ struct ServiceEditorSheet: View {
     @State private var icon: String = "gearshape"
     @State private var appPath: String = ""
     @State private var autoStart: Bool = true
+    @State private var precondition: PreconditionType = .none
+    @State private var preconditionCustomCommand: String = ""
     @State private var startCommand: String = ""
     @State private var stopCommand: String = ""
     @State private var statusCommand: String = ""
@@ -199,6 +201,27 @@ struct ServiceEditorSheet: View {
                             Text("自启与守护:").frame(width: 110, alignment: .trailing)
                             Toggle("ServiceHub 启动时自动拉起，并在异常退出时自动恢复", isOn: $autoStart)
                         }
+
+                        HStack(alignment: .top) {
+                            Text("启动前置条件:").frame(width: 110, alignment: .trailing)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Picker("", selection: $precondition) {
+                                    ForEach(PreconditionType.allCases, id: \.self) { p in
+                                        Text(p.displayName).tag(p)
+                                    }
+                                }
+                                .frame(maxWidth: 320)
+
+                                if precondition == .custom {
+                                    TextField("输入检测命令（退出码为 0 则视为条件满足）", text: $preconditionCustomCommand)
+                                        .textFieldStyle(.roundedBorder)
+                                } else if precondition != .none {
+                                    Text("守护引擎将在前置条件达成后（如 Wi-Fi/外网连接成功）才自动触发启动")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
                     }
 
                     Divider()
@@ -327,6 +350,8 @@ struct ServiceEditorSheet: View {
                 icon = s.icon
                 appPath = s.appPath ?? ""
                 autoStart = s.autoStart
+                precondition = s.precondition
+                preconditionCustomCommand = s.preconditionCustomCommand ?? ""
                 startCommand = s.startCommand
                 stopCommand = s.stopCommand ?? ""
                 statusCommand = s.statusCommand ?? ""
@@ -395,6 +420,8 @@ struct ServiceEditorSheet: View {
             icon: icon,
             appPath: appPath.isEmpty ? nil : appPath.trimmingCharacters(in: .whitespacesAndNewlines),
             autoStart: autoStart,
+            precondition: precondition,
+            preconditionCustomCommand: preconditionCustomCommand.isEmpty ? nil : preconditionCustomCommand.trimmingCharacters(in: .whitespacesAndNewlines),
             startCommand: startCommand.trimmingCharacters(in: .whitespacesAndNewlines),
             stopCommand: stopCommand.isEmpty ? nil : stopCommand.trimmingCharacters(in: .whitespacesAndNewlines),
             statusCommand: statusCommand.isEmpty ? nil : statusCommand.trimmingCharacters(in: .whitespacesAndNewlines),

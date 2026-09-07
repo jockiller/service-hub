@@ -29,6 +29,7 @@ struct MainWindow: View {
     @State private var isLogCollapsed: Bool = false
 
     @State private var showAddSheet = false
+    @State private var showSettings = false
     @State private var serviceToEdit: Service? = nil
     @State private var serviceToDelete: Service? = nil
 
@@ -208,6 +209,11 @@ struct MainWindow: View {
                 }
                 .help("添加新服务")
 
+                Button(action: { showSettings = true }) {
+                    Label("偏好设置", systemImage: "gearshape")
+                }
+                .help("偏好设置与关于")
+
                 Menu {
                     Button("导出服务配置备份 (YAML)...") {
                         exportBackup()
@@ -222,6 +228,7 @@ struct MainWindow: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .menuIndicator(.hidden)
                 .help("工具与配置备份")
             }
         }
@@ -233,6 +240,9 @@ struct MainWindow: View {
                     await supervisor.probeService(newService)
                 }
             }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
         }
         .sheet(item: $serviceToEdit) { s in
             ServiceEditorSheet(serviceToEdit: s) { updated in

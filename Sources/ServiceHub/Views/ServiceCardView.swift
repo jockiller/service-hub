@@ -65,6 +65,16 @@ struct ServiceCardView: View {
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 }
+
+                if currentStatus == .waitingPrecondition {
+                    Label(runtimeInfo.uptime ?? "等待条件", systemImage: "hourglass")
+                        .font(.system(size: 10))
+                        .foregroundColor(.orange)
+                } else if service.precondition != .none && currentStatus != .running {
+                    Text("[\(service.precondition.shortName)]")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
             }
             .padding(.vertical, 2)
 
@@ -117,6 +127,7 @@ struct ServiceCardView: View {
                         .font(.system(size: 12))
                 }
                 .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 .frame(width: 22)
             }
         }

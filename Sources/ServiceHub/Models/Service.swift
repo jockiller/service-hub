@@ -8,6 +8,7 @@ public enum ServiceStatus: String, Codable, CaseIterable {
     case stopping = "stopping"
     case failed = "failed"
     case probing = "probing"
+    case waitingPrecondition = "waiting"
     case unknown = "unknown"
 
     public var displayName: String {
@@ -18,6 +19,7 @@ public enum ServiceStatus: String, Codable, CaseIterable {
         case .stopping: return "正在停止"
         case .failed: return "异常"
         case .probing: return "检测中"
+        case .waitingPrecondition: return "等待前置条件"
         case .unknown: return "未知"
         }
     }
@@ -30,6 +32,7 @@ public enum ServiceStatus: String, Codable, CaseIterable {
         case .stopping: return .orange
         case .failed: return .red
         case .probing: return .yellow
+        case .waitingPrecondition: return .orange
         case .unknown: return .gray
         }
     }
@@ -42,6 +45,7 @@ public enum ServiceStatus: String, Codable, CaseIterable {
         case .stopping: return "arrow.down.circle"
         case .failed: return "exclamationmark.triangle.fill"
         case .probing: return "waveform.path.ecg"
+        case .waitingPrecondition: return "clock.badge.exclamationmark"
         case .unknown: return "questionmark.circle"
         }
     }
@@ -53,6 +57,8 @@ public struct Service: Identifiable, Codable, Equatable, Hashable {
     public var icon: String
     public var appPath: String?
     public var autoStart: Bool
+    public var precondition: PreconditionType
+    public var preconditionCustomCommand: String?
     public var startCommand: String
     public var stopCommand: String?
     public var statusCommand: String?
@@ -65,6 +71,8 @@ public struct Service: Identifiable, Codable, Equatable, Hashable {
         icon: String = "gearshape",
         appPath: String? = nil,
         autoStart: Bool = true,
+        precondition: PreconditionType = .none,
+        preconditionCustomCommand: String? = nil,
         startCommand: String,
         stopCommand: String? = nil,
         statusCommand: String? = nil,
@@ -76,11 +84,29 @@ public struct Service: Identifiable, Codable, Equatable, Hashable {
         self.icon = icon
         self.appPath = appPath
         self.autoStart = autoStart
+        self.precondition = precondition
+        self.preconditionCustomCommand = preconditionCustomCommand
         self.startCommand = startCommand
         self.stopCommand = stopCommand
         self.statusCommand = statusCommand
         self.logPath = logPath
         self.healthCheckURL = healthCheckURL
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.icon = try container.decodeIfPresent(String.self, forKey: .icon) ?? "gearshape"
+        self.appPath = try container.decodeIfPresent(String.self, forKey: .appPath)
+        self.autoStart = try container.decodeIfPresent(Bool.self, forKey: .autoStart) ?? true
+        self.precondition = try container.decodeIfPresent(PreconditionType.self, forKey: .precondition) ?? .none
+        self.preconditionCustomCommand = try container.decodeIfPresent(String.self, forKey: .preconditionCustomCommand)
+        self.startCommand = try container.decode(String.self, forKey: .startCommand)
+        self.stopCommand = try container.decodeIfPresent(String.self, forKey: .stopCommand)
+        self.statusCommand = try container.decodeIfPresent(String.self, forKey: .statusCommand)
+        self.logPath = try container.decodeIfPresent(String.self, forKey: .logPath)
+        self.healthCheckURL = try container.decodeIfPresent(String.self, forKey: .healthCheckURL)
     }
 }
 

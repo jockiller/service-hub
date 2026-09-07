@@ -102,6 +102,7 @@ struct ServiceListView: View {
                         Image(systemName: "ellipsis")
                     }
                     .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
                     .frame(width: 20)
                 }
                 .padding(.vertical, 4)

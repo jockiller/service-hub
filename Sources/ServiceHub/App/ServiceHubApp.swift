@@ -16,6 +16,11 @@ struct ServiceHubApp: App {
             SidebarCommands()
         }
 
+        // 偏好设置窗口 (支持 ⌘,)
+        Settings {
+            SettingsView()
+        }
+
         // 顶部菜单栏常驻图标 (现代化 Popover Window 风格)
         MenuBarExtra {
             MenuBarView()

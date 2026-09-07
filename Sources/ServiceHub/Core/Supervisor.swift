@@ -69,6 +69,17 @@ public final class Supervisor: ObservableObject {
                 uptime: res.status == .running ? res.uptimeString : nil
             )
 
+            // 如果当前正处于“等待前置条件”，检查条件是否已恢复满足
+            if self.statuses[service.id] == .waitingPrecondition && service.autoStart {
+                Task {
+                    let preCheck = await PreconditionChecker.check(service: service)
+                    if preCheck.isSatisfied {
+                        print("[Supervisor] 服务 \(service.name) 前置条件已满足，正在自动启动...")
+                        await startService(service)
+                    }
+                }
+            }
+
             // 如果服务配置了自启动，但发现停止了，且之前不是手动停止
             if service.autoStart && res.status == .stopped && prevStatus == .running {
                 let failures = consecutiveFailures[service.id, default: 0]
@@ -91,6 +102,22 @@ public final class Supervisor: ObservableObject {
     /// 启动单个服务
     public func startService(_ service: Service) async {
         isBusy[service.id] = true
+
+        // 1. 启动前先检查前置条件（如：是否已连入外网/Wi-Fi）
+        let preCheck = await PreconditionChecker.check(service: service)
+        if !preCheck.isSatisfied {
+            print("[Supervisor] 服务 \(service.name) 启动前置条件未满足: \(preCheck.reason)")
+            statuses[service.id] = .waitingPrecondition
+            runtimes[service.id] = ServiceRuntimeInfo(
+                status: .waitingPrecondition,
+                pid: nil,
+                uptime: preCheck.reason
+            )
+            lastOutputs[service.id] = "等待前置条件: \(preCheck.reason)"
+            isBusy[service.id] = false
+            return
+        }
+
         statuses[service.id] = .starting
         runtimes[service.id]?.status = .starting
 
