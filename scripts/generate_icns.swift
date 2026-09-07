@@ -73,3 +73,43 @@ if fm.fileExists(atPath: icnsPath) {
     print("[-] 生成 icns 失败")
     exit(1)
 }
+
+// ==================== 生成状态栏黑白 Template 图标 ====================
+let menuBarSvgPath = "\(projectDir)/Resources/MenuBarIcon.svg"
+if fm.fileExists(atPath: menuBarSvgPath),
+   let mbData = try? Data(contentsOf: URL(fileURLWithPath: menuBarSvgPath)),
+   let mbImg = NSImage(data: mbData) {
+    print("==> 正在生成状态栏黑白 Template 图标...")
+    let mbSizes = [
+        ("MenuBarIcon.png", 18),
+        ("MenuBarIcon@2x.png", 36)
+    ]
+    for m in mbSizes {
+        let targetSize = NSSize(width: m.1, height: m.1)
+        let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: m.1,
+            pixelsHigh: m.1,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        )!
+        rep.size = targetSize
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSGraphicsContext.current?.imageInterpolation = .high
+        mbImg.draw(in: NSRect(origin: .zero, size: targetSize), from: NSRect(origin: .zero, size: mbImg.size), operation: .copy, fraction: 1.0)
+        NSGraphicsContext.restoreGraphicsState()
+
+        if let pngData = rep.representation(using: .png, properties: [:]) {
+            let dest = "\(projectDir)/Resources/\(m.0)"
+            try? pngData.write(to: URL(fileURLWithPath: dest))
+        }
+    }
+    print("[✓] 状态栏黑白 Template 图标已生成！")
+}

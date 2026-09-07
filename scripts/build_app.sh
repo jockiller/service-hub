@@ -16,11 +16,13 @@ RESOURCES_DIR="$CONTENTS_DIR/Resources"
 rm -rf "$BUNDLE_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
-echo "==> 拷贝应用图标..."
-if [ ! -f "$DIR/Resources/AppIcon.icns" ]; then
+echo "==> 拷贝应用图标与状态栏图标..."
+if [ ! -f "$DIR/Resources/AppIcon.icns" ] || [ ! -f "$DIR/Resources/MenuBarIcon.png" ]; then
   swift "$DIR/scripts/generate_icns.swift" "$DIR"
 fi
 cp -f "$DIR/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+cp -f "$DIR/Resources/MenuBarIcon.png" "$RESOURCES_DIR/MenuBarIcon.png" 2>/dev/null || true
+cp -f "$DIR/Resources/MenuBarIcon@2x.png" "$RESOURCES_DIR/MenuBarIcon@2x.png" 2>/dev/null || true
 
 echo "==> 组装 macOS App Bundle..."
 cp -f "$DIR/.build/release/$APP_NAME" "$MACOS_DIR/$APP_NAME"
@@ -54,6 +56,9 @@ cat << 'EOF' > "$CONTENTS_DIR/Info.plist"
 </dict>
 </plist>
 EOF
+
+# 刷新系统图标注册缓存
+touch "$BUNDLE_DIR"
 
 echo "[✓] 编译打包完成！"
 echo "    App 路径: $BUNDLE_DIR"

@@ -28,6 +28,13 @@ struct ServiceEditorSheet: View {
     @State private var isScanningBrew = false
     @State private var selectedBrewItem: BrewServiceItem? = nil
 
+    // Docker 扫描状态
+    @State private var scannedDockerContainers: [DockerContainerItem] = []
+    @State private var isScanningDocker = false
+    @State private var dockerScanError: String? = nil
+    @State private var selectedDockerContainer: DockerContainerItem? = nil
+    @State private var manualDockerName: String = ""
+
     // 测试运行状态
     @State private var isTesting = false
     @State private var testOutput: String? = nil
@@ -36,7 +43,7 @@ struct ServiceEditorSheet: View {
         "gearshape", "bolt.fill", "network", "cylinder.split.1x2.fill",
         "cylinder.fill", "antenna.radiowaves.left.and.right", "server.rack",
         "shield.fill", "cpu", "memorychip", "terminal.fill", "globe",
-        "app.fill", "tray.2.fill", "macwindow"
+        "app.fill", "tray.2.fill", "macwindow", "shippingbox.fill", "cube.box.fill"
     ]
 
     init(serviceToEdit: Service? = nil, onSave: @escaping (Service) -> Void) {
@@ -69,6 +76,7 @@ struct ServiceEditorSheet: View {
                                 Text("自定义脚本 / 命令").tag(0)
                                 Text("Homebrew 服务").tag(1)
                                 Text("选取应用程序 (.app)").tag(2)
+                                Text("Docker 容器").tag(3)
                             }
                             .pickerStyle(.segmented)
                             .onChange(of: selectedTemplate) { val in
@@ -143,6 +151,79 @@ struct ServiceEditorSheet: View {
                             }
                             .padding(12)
                             .background(Color.accentColor.opacity(0.08))
+                            .cornerRadius(8)
+                        }
+
+                        // 模板 3: Docker 容器纳管面板
+                        if selectedTemplate == 3 {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("已扫描到本地 Docker 容器:")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Button(action: scanDockerContainers) {
+                                        if isScanningDocker {
+                                            ProgressView().controlSize(.small)
+                                        } else {
+                                            Label("重新扫描", systemImage: "arrow.triangle.2.circlepath")
+                                                .font(.caption)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                if isScanningDocker {
+                                    HStack {
+                                        ProgressView().controlSize(.small)
+                                        Text("正在扫描本地 Docker 容器列表...")
+                                            .font(.caption).foregroundColor(.secondary)
+                                    }
+                                    .padding(.vertical, 4)
+                                } else if let err = dockerScanError {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(err)
+                                            .font(.caption)
+                                            .foregroundColor(.orange)
+
+                                        HStack {
+                                            TextField("手动输入 Docker 容器名称 (如 my-redis)", text: $manualDockerName)
+                                                .textFieldStyle(.roundedBorder)
+                                            Button("应用") {
+                                                applyManualDocker(manualDockerName)
+                                            }
+                                            .disabled(manualDockerName.trimmingCharacters(in: .whitespaces).isEmpty)
+                                        }
+                                    }
+                                } else if scannedDockerContainers.isEmpty {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text("当前本地暂无容器，支持手动输入容器名快速纳管:")
+                                            .font(.caption).foregroundColor(.secondary)
+                                        HStack {
+                                            TextField("输入容器名称", text: $manualDockerName)
+                                                .textFieldStyle(.roundedBorder)
+                                            Button("应用") {
+                                                applyManualDocker(manualDockerName)
+                                            }
+                                            .disabled(manualDockerName.trimmingCharacters(in: .whitespaces).isEmpty)
+                                        }
+                                    }
+                                } else {
+                                    Picker("选择容器:", selection: $selectedDockerContainer) {
+                                        Text("—— 请选择要纳管的 Docker 容器 ——").tag(DockerContainerItem?.none)
+                                        ForEach(scannedDockerContainers, id: \.self) { c in
+                                            Text("\(c.name) [\(c.image)] (\(c.isRunning ? "运行中" : "已停止"))").tag(DockerContainerItem?.some(c))
+                                        }
+                                    }
+                                    .onChange(of: selectedDockerContainer) { item in
+                                        if let item = item {
+                                            applyDockerItem(item)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(10)
+                            .background(Color(NSColor.controlBackgroundColor))
                             .cornerRadius(8)
                         }
                     }
@@ -438,9 +519,49 @@ struct ServiceEditorSheet: View {
         } else if val == 2 {
             icon = "app.fill"
             pickAppAction()
+        } else if val == 3 {
+            icon = "shippingbox.fill"
+            scanDockerContainers()
         } else {
             icon = "gearshape"
         }
+    }
+
+    private func scanDockerContainers() {
+        isScanningDocker = true
+        dockerScanError = nil
+        Task {
+            let res = await DockerScanner.scanContainers()
+            isScanningDocker = false
+            if res.success {
+                scannedDockerContainers = res.containers
+            } else {
+                dockerScanError = res.error
+            }
+        }
+    }
+
+    private func applyDockerItem(_ item: DockerContainerItem) {
+        let trimmed = item.name.replacingOccurrences(of: "/", with: "")
+        id = trimmed
+        name = "\(trimmed.capitalized) (Docker)"
+        icon = "shippingbox.fill"
+        let dockerPath = DockerScanner.findDockerPath()
+        startCommand = "\(dockerPath) start \(trimmed)"
+        stopCommand = "\(dockerPath) stop \(trimmed)"
+        statusCommand = "\(dockerPath) inspect -f '{{.State.Running}}' \(trimmed) | grep -q \"true\""
+    }
+
+    private func applyManualDocker(_ rawName: String) {
+        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "/", with: "")
+        guard !trimmed.isEmpty else { return }
+        id = trimmed
+        name = "\(trimmed.capitalized) (Docker)"
+        icon = "shippingbox.fill"
+        let dockerPath = DockerScanner.findDockerPath()
+        startCommand = "\(dockerPath) start \(trimmed)"
+        stopCommand = "\(dockerPath) stop \(trimmed)"
+        statusCommand = "\(dockerPath) inspect -f '{{.State.Running}}' \(trimmed) | grep -q \"true\""
     }
 
     private func scanBrewServices() {
