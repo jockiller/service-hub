@@ -91,13 +91,13 @@ public final class LogTail: ObservableObject {
         logContent = ""
 
         guard let path = path, !path.isEmpty else {
-            logContent = "（该服务未配置日志文件路径）"
+            logContent = L("（该服务未配置日志文件路径）", "(No log file path configured for this service)")
             return
         }
 
         let url = URL(fileURLWithPath: path)
         guard FileManager.default.fileExists(atPath: url.path) else {
-            logContent = "（日志文件尚不存在: \(path)）"
+            logContent = L("（日志文件尚不存在: \(path)）", "(Log file does not exist yet: \(path))")
             return
         }
 

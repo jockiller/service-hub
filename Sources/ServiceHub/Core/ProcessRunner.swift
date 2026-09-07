@@ -59,12 +59,12 @@ public final class ProcessRunner {
 
                     let outputStr = String(data: data, encoding: .utf8) ?? ""
                     let exitCode = timedOut ? -999 : process.terminationStatus
-                    let finalOutput = timedOut ? (outputStr + "\n[!] 命令执行超时 (\(Int(timeout))s)") : outputStr
+                    let finalOutput = timedOut ? (outputStr + "\n[!] \(timeoutSuffix())") : outputStr
 
                     continuation.resume(returning: CommandResult(exitCode: exitCode, output: finalOutput.trimmingCharacters(in: .whitespacesAndNewlines)))
                 } catch {
                     timer.cancel()
-                    continuation.resume(returning: CommandResult(exitCode: -1, output: "启动命令失败: \(error.localizedDescription)"))
+                    continuation.resume(returning: CommandResult(exitCode: -1, output: "\(startFailedPrefix())\(error.localizedDescription)"))
                 }
             }
         }

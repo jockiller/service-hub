@@ -100,13 +100,13 @@ public final class Supervisor: ObservableObject {
                     // 触发熔断保护：在指定时间窗口内连续失败达到上限，暂停自动保活
                     isCircuitBroken[service.id] = true
                     self.statuses[service.id] = .failed
-                    let failReason = "已熔断: \(service.restartWindowSeconds)s内失败\(history.count)次，已停保活"
+                    let failReason = L("已熔断: \(service.restartWindowSeconds)s内失败\(history.count)次，已停保活", "Circuit broken: \(history.count) failures within \(service.restartWindowSeconds)s; keep-alive paused")
                     self.runtimes[service.id] = ServiceRuntimeInfo(
                         status: .failed,
                         pid: nil,
                         uptime: failReason
                     )
-                    lastOutputs[service.id] = "服务在 \(service.restartWindowSeconds) 秒内连续重启达到 \(service.maxRestarts) 次上限，已暂停自动保活保护系统。请排查原因后手动点击启动恢复。"
+                    lastOutputs[service.id] = L("服务在 \(service.restartWindowSeconds) 秒内连续重启达到 \(service.maxRestarts) 次上限，已暂停自动保活保护系统。请排查原因后手动点击启动恢复。", "Service restarted \(service.maxRestarts) time(s) within \(service.restartWindowSeconds)s; auto keep-alive paused. Investigate and start manually to resume.")
                     print("[-] [Supervisor] 服务 \(service.name) \(failReason)")
                 } else {
                     history.append(now)
@@ -141,7 +141,7 @@ public final class Supervisor: ObservableObject {
                 pid: nil,
                 uptime: preCheck.reason
             )
-            lastOutputs[service.id] = "等待前置条件: \(preCheck.reason)"
+            lastOutputs[service.id] = L("等待前置条件: \(preCheck.reason)", "Waiting for precondition: \(preCheck.reason)")
             isBusy[service.id] = false
             return
         }
@@ -162,6 +162,22 @@ public final class Supervisor: ObservableObject {
             pid: finalStatus == .running ? probeRes.pid : nil,
             uptime: finalStatus == .running ? probeRes.uptimeString : nil
         )
+
+        // 启动成功后，若勾选了“启动后打开主页”，自动调用默认浏览器打开
+        if finalStatus == .running, service.openWebURLOnStart,
+           let webURLStr = service.webURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !webURLStr.isEmpty,
+           let url = URL(string: webURLStr) {
+            DispatchQueue.main.async {
+                NSWorkspace.shared.open(url)
+            }
+        }
+
+        // 若服务配置了公网穿透并自启，启动成功后联动拉起隧道
+        if finalStatus == .running, service.tunnelConfig?.enabled == true {
+            CloudflareTunnelManager.shared.startTunnel(for: service)
+        }
+
         isBusy[service.id] = false
     }
 
@@ -188,6 +204,10 @@ public final class Supervisor: ObservableObject {
             pid: finalStatus == .running ? probeRes.pid : nil,
             uptime: nil
         )
+
+        // 服务停止后，级联关闭关联的公网穿透隧道，防止孤立暴露
+        CloudflareTunnelManager.shared.stopTunnel(for: service.id)
+
         isBusy[service.id] = false
     }
 

@@ -9,6 +9,8 @@ struct ServiceCardView: View {
     let onDelete: () -> Void
 
     @ObservedObject var supervisor = Supervisor.shared
+    @ObservedObject var tunnelManager = CloudflareTunnelManager.shared
+    @ObservedObject var localization = Localization.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -47,8 +49,21 @@ struct ServiceCardView: View {
                 }
             }
 
-            // 中部指标：PID、运行时长、熔断提示、前置条件标签
+            // 中部指标：公网竖条、PID、运行时长、熔断提示、前置条件标签
             HStack(spacing: 8) {
+                // 公网暴露标识：左侧 3pt 紫色渐变竖条（比 Badge 更克制，不挤压头部）
+                if tunnelManager.isTunnelActive(for: service.id) {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(
+                            LinearGradient(
+                                colors: [.purple, .pink],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: 3, height: 16)
+                }
+
                 if let pid = runtimeInfo.pid, currentStatus == .running {
                     Label("\(pid)", systemImage: "cpu")
                         .font(.system(size: 10, design: .monospaced))
@@ -61,16 +76,16 @@ struct ServiceCardView: View {
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 } else if currentStatus == .waitingPrecondition {
-                    Label(runtimeInfo.uptime ?? "等待条件", systemImage: "hourglass")
+                    Label(runtimeInfo.uptime ?? L("等待条件", "Waiting"), systemImage: "hourglass")
                         .font(.system(size: 10))
                         .foregroundColor(.orange)
                         .lineLimit(1)
                 } else if supervisor.isCircuitBroken[service.id] == true {
-                    Label("已暂停保活", systemImage: "exclamationmark.octagon.fill")
+                    Label(L("已暂停保活", "Keep-alive paused"), systemImage: "exclamationmark.octagon.fill")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.red)
                 } else if currentStatus == .stopped {
-                    Text("未运行")
+                    Text(L("未运行", "Stopped"))
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 }
@@ -89,13 +104,60 @@ struct ServiceCardView: View {
             }
             .frame(height: 18)
 
+            // 公网映射状态与分配的公网 URL —— 固定高度槽位：无论是否有隧道都占位 22pt，
+            // 保证同一排卡片等高、底部按钮栏完全对齐，出现/消失时不再引起高度跳变
+            HStack(spacing: 5) {
+                if let pubUrl = tunnelManager.publicUrls[service.id] {
+                    Image(systemName: "globe")
+                        .font(.system(size: 10))
+                        .foregroundColor(.purple)
+                    Text(pubUrl)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.purple)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                    Button(action: {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(pubUrl, forType: .string)
+                    }) {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 9))
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("复制公网链接", "Copy public URL"))
+
+                    Button(action: {
+                        if let u = URL(string: pubUrl) { NSWorkspace.shared.open(u) }
+                    }) {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 9))
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("在浏览器打开公网链接", "Open public URL in browser"))
+                } else if tunnelManager.isConnecting[service.id] == true {
+                    ProgressView().controlSize(.mini)
+                    Text(tunnelManager.tunnelStates[service.id] ?? L("正在建立公网隧道...", "Establishing tunnel..."))
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 6)
+            .frame(height: 22)
+            .background(
+                tunnelManager.publicUrls[service.id] != nil
+                    ? RoundedRectangle(cornerRadius: 5).fill(Color.purple.opacity(0.08))
+                    : RoundedRectangle(cornerRadius: 5).fill(.clear)
+            )
+
             Divider()
 
             // 底部快捷操作按钮栏
             HStack(spacing: 6) {
                 if currentStatus == .running {
                     Button(action: { Task { await supervisor.stopService(service) } }) {
-                        Label("关闭", systemImage: "stop.fill")
+                        Label(L("关闭", "Stop"), systemImage: "stop.fill")
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.bordered)
@@ -103,16 +165,16 @@ struct ServiceCardView: View {
                     .disabled(isBusy)
 
                     Button(action: { Task { await supervisor.restartService(service) } }) {
-                        Image(systemName: "arrow.clockwise")
+                        Text(L("重启", "Restart"))
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(isBusy)
-                    .help("重启服务")
+                    .help(L("重启服务", "Restart service"))
                 } else {
                     Button(action: { Task { await supervisor.startService(service) } }) {
-                        Label("启动", systemImage: "play.fill")
+                        Label(L("启动", "Start"), systemImage: "play.fill")
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.borderedProminent)
@@ -120,17 +182,58 @@ struct ServiceCardView: View {
                     .disabled(isBusy)
                 }
 
+                if let webStr = service.webURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !webStr.isEmpty,
+                   let url = URL(string: webStr) {
+                    Button(action: { NSWorkspace.shared.open(url) }) {
+                        Image(systemName: "safari")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help(L("打开服务主页: \(webStr)", "Open homepage: \(webStr)"))
+                }
+
+                // 公网映射快捷按钮 —— 仅对配置了服务主页的服务开放
+                let isTunneled = tunnelManager.isTunnelActive(for: service.id)
+                let hasWebURL = service.webURL?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                if hasWebURL {
+                    Button(action: toggleTunnel) {
+                        HStack(spacing: 3) {
+                            Image(systemName: isTunneled ? "globe.badge.chevron.backward" : "globe")
+                                .font(.system(size: 10))
+                            Text(isTunneled ? L("断开公网", "Disconnect") : L("公网穿透", "Public URL"))
+                                .font(.system(size: 10))
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .foregroundColor(isTunneled ? .purple : .secondary)
+                    .help(isTunneled ? L("点击断开当前公网映射", "Click to disconnect the public tunnel") : L("通过 Cloudflare 隧道一键将本地服务映射到公网", "Expose this service via a Cloudflare Tunnel"))
+                }
+
                 Spacer()
 
                 Menu {
-                    Button("编辑服务配置...") {
+                    if let webStr = service.webURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !webStr.isEmpty,
+                       let url = URL(string: webStr) {
+                        Button {
+                            NSWorkspace.shared.open(url)
+                        } label: {
+                            Label(L("打开服务主页", "Open Homepage"), systemImage: "safari")
+                        }
+                        Divider()
+                    }
+
+                    Button(L("编辑服务配置...", "Edit Service...")) {
                         onEdit()
                     }
-                    Button("手动刷新状态") {
+                    Button(L("手动刷新状态", "Refresh Status")) {
                         Task { await supervisor.probeService(service) }
                     }
                     Divider()
-                    Button("删除服务", role: .destructive) {
+                    Button(L("删除服务", "Delete Service"), role: .destructive) {
                         onDelete()
                     }
                 } label: {
@@ -203,6 +306,14 @@ struct ServiceCardView: View {
             return Color.red.opacity(0.35)
         default:
             return Color.secondary.opacity(0.12)
+        }
+    }
+
+    private func toggleTunnel() {
+        if tunnelManager.isTunnelActive(for: service.id) {
+            tunnelManager.stopTunnel(for: service.id)
+        } else {
+            tunnelManager.startTunnel(for: service)
         }
     }
 }

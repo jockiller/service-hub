@@ -16,8 +16,8 @@ public final class AppPickerHelper {
     @MainActor
     public static func pickApplication() -> AppMetadata? {
         let openPanel = NSOpenPanel()
-        openPanel.title = "选择 macOS 应用程序"
-        openPanel.prompt = "选取应用"
+        openPanel.title = L("选择 macOS 应用程序", "Choose a macOS Application")
+        openPanel.prompt = L("选取应用", "Choose")
         openPanel.directoryURL = URL(fileURLWithPath: "/Applications")
         openPanel.allowedContentTypes = [.application, .applicationBundle]
         openPanel.allowsMultipleSelection = false
@@ -53,10 +53,10 @@ public final class AppPickerHelper {
 
     /// 弹出选择任意文件（脚本、二进制、日志文件等）
     @MainActor
-    public static func pickFile(title: String = "选择文件") -> String? {
+    public static func pickFile(title: String? = nil) -> String? {
         let openPanel = NSOpenPanel()
         openPanel.title = title
-        openPanel.prompt = "选取"
+        openPanel.prompt = L("选取", "Choose")
         openPanel.allowsMultipleSelection = false
         openPanel.canChooseDirectories = false
         openPanel.canChooseFiles = true

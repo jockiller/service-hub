@@ -4,6 +4,7 @@ import SwiftUI
 struct MenuBarView: View {
     @ObservedObject var store = ServiceStore.shared
     @ObservedObject var supervisor = Supervisor.shared
+    @ObservedObject var localization = Localization.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -11,13 +12,13 @@ struct MenuBarView: View {
             HStack {
                 Image(systemName: "server.rack")
                     .foregroundColor(.accentColor)
-                Text("ServiceHub 服务列表")
+                Text(L("ServiceHub 服务列表", "ServiceHub Services"))
                     .font(.system(size: 13, weight: .bold))
 
                 Spacer()
 
                 let runningCount = store.services.filter { supervisor.statuses[$0.id] == .running }.count
-                Text("\(runningCount)/\(store.services.count) 运行中")
+                Text(L("\(runningCount)/\(store.services.count) 运行中", "\(runningCount)/\(store.services.count) running"))
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 6)
@@ -30,7 +31,7 @@ struct MenuBarView: View {
                         .font(.caption)
                 }
                 .buttonStyle(.plain)
-                .help("重新检测状态")
+                .help(L("重新检测状态", "Refresh Status"))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -41,7 +42,7 @@ struct MenuBarView: View {
             // 核心列表：每条服务独立一个 item
             if store.services.isEmpty {
                 VStack(spacing: 6) {
-                    Text("尚未配置任何服务")
+                    Text(L("尚未配置任何服务", "No services configured"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -89,6 +90,18 @@ struct MenuBarView: View {
 
                             Spacer()
 
+                            if let webStr = s.webURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                               !webStr.isEmpty,
+                               let url = URL(string: webStr) {
+                                Button(action: { NSWorkspace.shared.open(url) }) {
+                                    Image(systemName: "safari")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.accentColor)
+                                }
+                                .buttonStyle(.plain)
+                                .help(L("打开服务主页: \(webStr)", "Open homepage: \(webStr)"))
+                            }
+
                             // 每一个服务独立的控制按钮组：启动 / 关闭 / 重启
                             if isBusy {
                                 ProgressView()
@@ -96,20 +109,20 @@ struct MenuBarView: View {
                                     .frame(width: 60)
                             } else if st == .running {
                                 HStack(spacing: 6) {
-                                    Button("关闭") {
+                                    Button(L("关闭", "Stop")) {
                                         Task { await supervisor.stopService(s) }
                                     }
                                     .buttonStyle(.bordered)
                                     .controlSize(.small)
 
-                                    Button("重启") {
+                                    Button(L("重启", "Restart")) {
                                         Task { await supervisor.restartService(s) }
                                     }
                                     .buttonStyle(.bordered)
                                     .controlSize(.small)
                                 }
                             } else {
-                                Button("启动") {
+                                Button(L("启动", "Start")) {
                                     Task { await supervisor.startService(s) }
                                 }
                                 .buttonStyle(.borderedProminent)
@@ -132,7 +145,7 @@ struct MenuBarView: View {
             // 底部操作栏
             HStack {
                 Button(action: openMainWindow) {
-                    Label("打开主控制面板", systemImage: "macwindow")
+                    Label(L("打开主控制面板", "Open Main Panel"), systemImage: "macwindow")
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.plain)
@@ -140,7 +153,7 @@ struct MenuBarView: View {
                 Spacer()
 
                 Button(action: { NSApp.terminate(nil) }) {
-                    Text("退出")
+                    Text(L("退出", "Quit"))
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 }

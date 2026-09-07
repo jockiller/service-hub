@@ -22,18 +22,18 @@ public final class PreconditionChecker {
 
         switch service.precondition {
         case .none:
-            return (true, "就绪")
+            return (true, L("就绪", "Ready"))
 
         // ------------------ 网络类 ------------------
         case .networkConnected:
             let cmd = "curl -sI -m 2 https://captive.apple.com/hotspot-detect.html >/dev/null 2>&1 || ping -c 1 -t 2 223.5.5.5 >/dev/null 2>&1"
             let res = await ProcessRunner.run(command: cmd, timeout: 3)
-            return res.isSuccess ? (true, "互联网已连通") : (false, "等待外网连接")
+            return res.isSuccess ? (true, L("互联网已连通", "Internet connected")) : (false, L("等待外网连接", "Waiting for internet"))
 
         case .networkDisconnected:
             let cmd = "curl -sI -m 2 https://captive.apple.com/hotspot-detect.html >/dev/null 2>&1 || ping -c 1 -t 2 223.5.5.5 >/dev/null 2>&1"
             let res = await ProcessRunner.run(command: cmd, timeout: 3)
-            return !res.isSuccess ? (true, "当前处于离线模式") : (false, "等待网络断开")
+            return !res.isSuccess ? (true, L("当前处于离线模式", "Currently offline")) : (false, L("等待网络断开", "Waiting for network to disconnect"))
 
         case .wifiConnected:
             let targetDev = await getWifiDevice()
@@ -45,15 +45,15 @@ public final class PreconditionChecker {
 
                 if !param.isEmpty {
                     if currentSSID.localizedCaseInsensitiveContains(param) {
-                        return (true, "已连接指定 Wi-Fi: \(currentSSID)")
+                        return (true, L("已连接指定 Wi-Fi: \(currentSSID)", "Connected to specified Wi-Fi: \(currentSSID)"))
                     } else {
-                        return (false, "当前为 \(currentSSID)，等待连接指定 Wi-Fi: \(param)")
+                        return (false, L("当前为 \(currentSSID)，等待连接指定 Wi-Fi: \(param)", "Currently on \(currentSSID); waiting for \(param)"))
                     }
                 } else {
-                    return (true, "已连接 Wi-Fi: \(currentSSID)")
+                    return (true, L("已连接 Wi-Fi: \(currentSSID)", "Wi-Fi connected: \(currentSSID)"))
                 }
             } else {
-                return (false, "等待连接 Wi-Fi")
+                return (false, L("等待连接 Wi-Fi", "Waiting for Wi-Fi"))
             }
 
         case .wifiDisconnected:
@@ -61,26 +61,26 @@ public final class PreconditionChecker {
             let wifiCmd = "networksetup -getairportnetwork \(targetDev) 2>/dev/null"
             let wifiRes = await ProcessRunner.run(command: wifiCmd, timeout: 2)
             if !wifiRes.output.contains("Current Wi-Fi Network:") {
-                return (true, "Wi-Fi 未连接")
+                return (true, L("Wi-Fi 未连接", "Wi-Fi disconnected"))
             } else {
-                return (false, "等待断开 Wi-Fi")
+                return (false, L("等待断开 Wi-Fi", "Waiting for Wi-Fi to disconnect"))
             }
 
         case .vpnActive:
             let cmd = "ifconfig 2>/dev/null | grep -q 'utun'"
             let res = await ProcessRunner.run(command: cmd, timeout: 2)
-            return res.isSuccess ? (true, "VPN / 代理虚拟网卡已就绪") : (false, "等待 VPN / 代理连接")
+            return res.isSuccess ? (true, L("VPN / 代理虚拟网卡已就绪", "VPN / proxy interface ready")) : (false, L("等待 VPN / 代理连接", "Waiting for VPN / proxy"))
 
         // ------------------ 蓝牙类 ------------------
         case .bluetoothOn:
             let cmd = "system_profiler SPBluetoothDataType 2>/dev/null | grep -iE '(State: On|Bluetooth Power: On|Power State: 1)'"
             let res = await ProcessRunner.run(command: cmd, timeout: 3)
-            return res.isSuccess ? (true, "蓝牙已开启") : (false, "等待蓝牙开启")
+            return res.isSuccess ? (true, L("蓝牙已开启", "Bluetooth on")) : (false, L("等待蓝牙开启", "Waiting for Bluetooth to turn on"))
 
         case .bluetoothOff:
             let cmd = "system_profiler SPBluetoothDataType 2>/dev/null | grep -iE '(State: Off|Bluetooth Power: Off|Power State: 0)'"
             let res = await ProcessRunner.run(command: cmd, timeout: 3)
-            return res.isSuccess ? (true, "蓝牙已关闭") : (false, "等待蓝牙关闭")
+            return res.isSuccess ? (true, L("蓝牙已关闭", "Bluetooth off")) : (false, L("等待蓝牙关闭", "Waiting for Bluetooth to turn off"))
 
         case .bluetoothConnected:
             let cmd = "system_profiler SPBluetoothDataType 2>/dev/null"
@@ -88,16 +88,16 @@ public final class PreconditionChecker {
             if !param.isEmpty {
                 // 检测指定设备
                 if res.output.localizedCaseInsensitiveContains(param) && res.output.contains("Connected: Yes") {
-                    return (true, "已连接蓝牙设备: \(param)")
+                    return (true, L("已连接蓝牙设备: \(param)", "Bluetooth device connected: \(param)"))
                 } else {
-                    return (false, "等待连接蓝牙设备: \(param)")
+                    return (false, L("等待连接蓝牙设备: \(param)", "Waiting for Bluetooth device: \(param)"))
                 }
             } else {
                 // 任意蓝牙设备
                 if res.output.contains("Connected: Yes") {
-                    return (true, "蓝牙设备已连接")
+                    return (true, L("蓝牙设备已连接", "Bluetooth device connected"))
                 } else {
-                    return (false, "等待蓝牙设备连接")
+                    return (false, L("等待蓝牙设备连接", "Waiting for Bluetooth device"))
                 }
             }
 
@@ -105,63 +105,63 @@ public final class PreconditionChecker {
         case .acPower:
             let cmd = "pmset -g batt 2>/dev/null | grep -q 'AC Power'"
             let res = await ProcessRunner.run(command: cmd, timeout: 2)
-            return res.isSuccess ? (true, "已连接电源适配器") : (false, "等待连接电源适配器 (插电)")
+            return res.isSuccess ? (true, L("已连接电源适配器", "AC power connected")) : (false, L("等待连接电源适配器 (插电)", "Waiting for AC power"))
 
         case .onBattery:
             let cmd = "pmset -g batt 2>/dev/null | grep -q 'Battery Power'"
             let res = await ProcessRunner.run(command: cmd, timeout: 2)
-            return res.isSuccess ? (true, "正在使用电池供电") : (false, "等待断开电源切换至电池")
+            return res.isSuccess ? (true, L("正在使用电池供电", "On battery power")) : (false, L("等待断开电源切换至电池", "Waiting to switch to battery"))
 
         case .externalDisplay:
             let screenCount = NSScreen.screens.count
             if screenCount > 1 {
-                return (true, "已连接外接显示器 (共 \(screenCount) 块屏幕)")
+                return (true, L("已连接外接显示器 (共 \(screenCount) 块屏幕)", "External display connected (\(screenCount) screen(s)))"))
             } else {
-                return (false, "等待连接外接显示器")
+                return (false, L("等待连接外接显示器", "Waiting for external display"))
             }
 
         case .volumeMounted:
             guard !param.isEmpty else {
-                return (false, "未指定磁盘名称")
+                return (false, L("未指定磁盘名称", "Volume name not specified"))
             }
             let targetPath = param.hasPrefix("/Volumes/") ? param : "/Volumes/\(param)"
             if FileManager.default.fileExists(atPath: targetPath) {
-                return (true, "磁盘卷宗已挂载: \(targetPath)")
+                return (true, L("磁盘卷宗已挂载: \(targetPath)", "Volume mounted: \(targetPath)"))
             } else {
-                return (false, "等待磁盘挂载: \(targetPath)")
+                return (false, L("等待磁盘挂载: \(targetPath)", "Waiting for volume: \(targetPath)"))
             }
 
         // ------------------ 高级类 ------------------
         case .portAvailable:
             guard let port = Int(param), port > 0, port <= 65535 else {
-                return (false, "请指定有效端口号 (1~65535)")
+                return (false, L("请指定有效端口号 (1~65535)", "Specify a valid port (1-65535)"))
             }
             let cmd = "lsof -i :\(port) >/dev/null 2>&1"
             let res = await ProcessRunner.run(command: cmd, timeout: 2)
             // lsof 返回非0说明端口未被占用（可用）
             if !res.isSuccess {
-                return (true, "端口 \(port) 空闲可用")
+                return (true, L("端口 \(port) 空闲可用", "Port \(port) is available"))
             } else {
-                return (false, "端口 \(port) 目前被占用，等待释放")
+                return (false, L("端口 \(port) 目前被占用，等待释放", "Port \(port) in use; waiting to be released"))
             }
 
         case .hostReachable:
             guard !param.isEmpty else {
-                return (false, "未指定目标主机")
+                return (false, L("未指定目标主机", "Target host not specified"))
             }
             let cmd = "ping -c 1 -t 2 '\(param)' >/dev/null 2>&1 || curl -sI -m 2 '\(param)' >/dev/null 2>&1"
             let res = await ProcessRunner.run(command: cmd, timeout: 3)
-            return res.isSuccess ? (true, "目标主机 \(param) 可达") : (false, "等待主机 \(param) 网络可达")
+            return res.isSuccess ? (true, L("目标主机 \(param) 可达", "Host \(param) reachable")) : (false, L("等待主机 \(param) 网络可达", "Waiting for host \(param)"))
 
         case .custom:
             guard !param.isEmpty else {
-                return (true, "未配置命令，默认满足")
+                return (true, L("未配置命令，默认满足", "No command configured; treated as satisfied"))
             }
             let res = await ProcessRunner.run(command: param, timeout: 5)
             if res.isSuccess {
-                return (true, "自定义检测通过")
+                return (true, L("自定义检测通过", "Custom check passed"))
             } else {
-                return (false, "等待自定义条件满足 (退出码: \(res.exitCode))")
+                return (false, L("等待自定义条件满足 (退出码: \(res.exitCode))", "Waiting for custom condition (exit code: \(res.exitCode))"))
             }
         }
     }

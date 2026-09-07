@@ -142,7 +142,8 @@ public final class ServiceStore: ObservableObject {
                 stopCommand: "/Users/jockiller/Documents/workspace/git_work/my/py3/ai/gpt_load/gpt_load stop",
                 statusCommand: "/Users/jockiller/Documents/workspace/git_work/my/py3/ai/gpt_load/gpt_load status",
                 logPath: "/Users/jockiller/env/gpt_load/gpt-load.log",
-                healthCheckURL: "http://127.0.0.1:3001/health"
+                healthCheckURL: "http://127.0.0.1:3001/health",
+                webURL: "http://127.0.0.1:3001"
             ),
             Service(
                 id: "frpc",

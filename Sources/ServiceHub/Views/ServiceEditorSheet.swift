@@ -5,6 +5,8 @@ struct ServiceEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     let serviceToEdit: Service?
     let onSave: (Service) -> Void
+    // 观察语言变化
+    @ObservedObject var localization = Localization.shared
 
     @State private var id: String = ""
     @State private var name: String = ""
@@ -20,23 +22,27 @@ struct ServiceEditorSheet: View {
     @State private var statusCommand: String = ""
     @State private var logPath: String = ""
     @State private var healthCheckURL: String = ""
+    @State private var webURL: String = ""
+    @State private var openWebURLOnStart: Bool = false
+    @State private var tunnelEnabled: Bool = false
+    @State private var tunnelMode: TunnelMode = .quick
+    @State private var tunnelCustomDomain: String = ""
+    @State private var tunnelToken: String = ""
+    @State private var tunnelTarget: String = ""
 
-    // 0: 自定义脚本/命令, 1: Homebrew 服务, 2: 选取 macOS 应用程序
+    // 0: 自定义, 1: Brew, 2: App, 3: Docker
     @State private var selectedTemplate: Int = 0
 
-    // Homebrew 扫描状态
+    // 扫描状态
     @State private var scannedBrewServices: [BrewServiceItem] = []
     @State private var isScanningBrew = false
     @State private var selectedBrewItem: BrewServiceItem? = nil
 
-    // Docker 扫描状态
     @State private var scannedDockerContainers: [DockerContainerItem] = []
     @State private var isScanningDocker = false
     @State private var dockerScanError: String? = nil
     @State private var selectedDockerContainer: DockerContainerItem? = nil
-    @State private var manualDockerName: String = ""
 
-    // 测试运行状态
     @State private var isTesting = false
     @State private var testOutput: String? = nil
 
@@ -54,12 +60,12 @@ struct ServiceEditorSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // 顶部标题
+            // 顶栏
             HStack {
-                Text(serviceToEdit == nil ? "添加新服务" : "编辑服务: \(serviceToEdit!.name)")
+                Text(serviceToEdit == nil ? L("添加服务", "Add Service") : L("编辑服务", "Edit Service"))
                     .font(.headline)
                 Spacer()
-                Button("取消") { dismiss() }
+                Button(L("取消", "Cancel")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
             .padding()
@@ -67,17 +73,15 @@ struct ServiceEditorSheet: View {
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // 模板选择（仅新建模式下展示）
+                VStack(alignment: .leading, spacing: 14) {
+                    // 模板切换（新建时）
                     if serviceToEdit == nil {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("快速接入方式")
-                                .font(.subheadline).foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 6) {
                             Picker("", selection: $selectedTemplate) {
-                                Text("自定义脚本 / 命令").tag(0)
-                                Text("Homebrew 服务").tag(1)
-                                Text("选取应用程序 (.app)").tag(2)
-                                Text("Docker 容器").tag(3)
+                                Text(L("自定义", "Custom")).tag(0)
+                                Text("Homebrew").tag(1)
+                                Text(L("应用程序", "Application")).tag(2)
+                                Text("Docker").tag(3)
                             }
                             .pickerStyle(.segmented)
                             .onChange(of: selectedTemplate) { val in
@@ -85,290 +89,181 @@ struct ServiceEditorSheet: View {
                             }
                         }
 
-                        // 模板 1: Homebrew 扫描面板
+                        // Brew 快速选择
                         if selectedTemplate == 1 {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("已扫描到本地 Brew 服务:")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    Spacer()
-                                    Button(action: scanBrewServices) {
-                                        if isScanningBrew {
-                                            ProgressView().controlSize(.small)
-                                        } else {
-                                            Label("重新扫描", systemImage: "arrow.triangle.2.circlepath")
-                                                .font(.caption)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-
+                            HStack {
                                 if isScanningBrew {
-                                    HStack {
-                                        ProgressView().controlSize(.small)
-                                        Text("正在扫描本地已安装的 Homebrew 服务...")
-                                            .font(.caption).foregroundColor(.secondary)
-                                    }
-                                    .padding(.vertical, 4)
+                                    ProgressView().controlSize(.small)
+                                    Text(L("正在扫描 Homebrew 服务...", "Scanning Homebrew services...")).font(.caption).foregroundColor(.secondary)
                                 } else if scannedBrewServices.isEmpty {
-                                    Text("未检测到本地已安装的 Homebrew 服务（或 brew 未安装）")
-                                        .font(.caption).foregroundColor(.secondary)
+                                    Text(L("未检测到 Homebrew 服务", "No Homebrew services found")).font(.caption).foregroundColor(.secondary)
                                 } else {
-                                    Picker("选择服务:", selection: $selectedBrewItem) {
-                                        Text("—— 请选择要纳管的 Brew 服务 ——").tag(BrewServiceItem?.none)
+                                    Picker(L("服务:", "Service:"), selection: $selectedBrewItem) {
+                                        Text(L("选择已安装的 Brew 服务", "Select a Brew service")).tag(BrewServiceItem?.none)
                                         ForEach(scannedBrewServices, id: \.self) { item in
-                                            Text("\(item.name) (\(item.isStarted ? "运行中" : "已停止"))").tag(BrewServiceItem?.some(item))
+                                            Text("\(item.name) (\(item.isStarted ? L("运行中", "running") : L("已停止", "stopped")))").tag(BrewServiceItem?.some(item))
                                         }
                                     }
                                     .onChange(of: selectedBrewItem) { item in
-                                        if let item = item {
-                                            applyBrewItem(item)
-                                        }
+                                        if let item = item { applyBrewItem(item) }
                                     }
                                 }
+                                Spacer()
+                                Button(action: scanBrewServices) {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .padding(10)
+                            .padding(8)
                             .background(Color(NSColor.controlBackgroundColor))
-                            .cornerRadius(8)
+                            .cornerRadius(6)
                         }
 
-                        // 模板 2: 选取应用程序面板
+                        // App 快速选择
                         if selectedTemplate == 2 {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("选取本地已安装的 macOS 应用程序")
-                                            .font(.system(size: 13, weight: .medium))
-                                        Text("自动提取应用名称、可执行文件并生成启动、停止与存活检测命令")
-                                            .font(.caption).foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    Button(action: pickAppAction) {
-                                        Label("浏览应用程序...", systemImage: "macwindow")
-                                    }
-                                    .buttonStyle(.borderedProminent)
+                            HStack {
+                                Text(L("从本地选取应用程序 (.app)", "Choose an application (.app) from disk"))
+                                    .font(.caption).foregroundColor(.secondary)
+                                Spacer()
+                                Button(L("选取应用...", "Choose App...")) {
+                                    pickAppAction()
                                 }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
                             }
-                            .padding(12)
-                            .background(Color.accentColor.opacity(0.08))
-                            .cornerRadius(8)
+                            .padding(8)
+                            .background(Color(NSColor.controlBackgroundColor))
+                            .cornerRadius(6)
                         }
 
-                        // 模板 3: Docker 容器纳管面板
+                        // Docker 快速选择 —— 仅允许选择本机已存在的容器，不支持手填名称
                         if selectedTemplate == 3 {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text("已扫描到本地 Docker 容器:")
+                            HStack {
+                                if isScanningDocker {
+                                    ProgressView().controlSize(.small)
+                                    Text(L("正在扫描 Docker 容器...", "Scanning Docker containers...")).font(.caption).foregroundColor(.secondary)
+                                } else if let err = dockerScanError {
+                                    Label(err, systemImage: "exclamationmark.triangle")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                        .lineLimit(2)
+                                } else if scannedDockerContainers.isEmpty {
+                                    Label(L("未发现任何 Docker 容器", "No Docker containers found"), systemImage: "shippingbox")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
-                                    Spacer()
-                                    Button(action: scanDockerContainers) {
-                                        if isScanningDocker {
-                                            ProgressView().controlSize(.small)
-                                        } else {
-                                            Label("重新扫描", systemImage: "arrow.triangle.2.circlepath")
-                                                .font(.caption)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-
-                                if isScanningDocker {
-                                    HStack {
-                                        ProgressView().controlSize(.small)
-                                        Text("正在扫描本地 Docker 容器列表...")
-                                            .font(.caption).foregroundColor(.secondary)
-                                    }
-                                    .padding(.vertical, 4)
-                                } else if let err = dockerScanError {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(err)
-                                            .font(.caption)
-                                            .foregroundColor(.orange)
-
-                                        HStack {
-                                            TextField("手动输入 Docker 容器名称 (如 my-redis)", text: $manualDockerName)
-                                                .textFieldStyle(.roundedBorder)
-                                            Button("应用") {
-                                                applyManualDocker(manualDockerName)
-                                            }
-                                            .disabled(manualDockerName.trimmingCharacters(in: .whitespaces).isEmpty)
-                                        }
-                                    }
-                                } else if scannedDockerContainers.isEmpty {
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text("当前本地暂无容器，支持手动输入容器名快速纳管:")
-                                            .font(.caption).foregroundColor(.secondary)
-                                        HStack {
-                                            TextField("输入容器名称", text: $manualDockerName)
-                                                .textFieldStyle(.roundedBorder)
-                                            Button("应用") {
-                                                applyManualDocker(manualDockerName)
-                                            }
-                                            .disabled(manualDockerName.trimmingCharacters(in: .whitespaces).isEmpty)
-                                        }
-                                    }
                                 } else {
-                                    Picker("选择容器:", selection: $selectedDockerContainer) {
-                                        Text("—— 请选择要纳管的 Docker 容器 ——").tag(DockerContainerItem?.none)
+                                    Picker(L("容器:", "Container:"), selection: $selectedDockerContainer) {
+                                        Text(L("选择本地 Docker 容器", "Select a Docker container")).tag(DockerContainerItem?.none)
                                         ForEach(scannedDockerContainers, id: \.self) { c in
-                                            Text("\(c.name) [\(c.image)] (\(c.isRunning ? "运行中" : "已停止"))").tag(DockerContainerItem?.some(c))
+                                            Text("\(c.name) (\(c.isRunning ? L("运行中", "running") : L("已停止", "stopped")))").tag(DockerContainerItem?.some(c))
                                         }
                                     }
                                     .onChange(of: selectedDockerContainer) { item in
-                                        if let item = item {
-                                            applyDockerItem(item)
-                                        }
+                                        if let item = item { applyDockerItem(item) }
                                     }
                                 }
+                                Spacer()
+                                Button(action: scanDockerContainers) {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                }
+                                .buttonStyle(.plain)
+                                .help(L("重新扫描本机容器", "Rescan containers"))
                             }
-                            .padding(10)
+                            .padding(8)
                             .background(Color(NSColor.controlBackgroundColor))
-                            .cornerRadius(8)
+                            .cornerRadius(6)
                         }
                     }
 
-                    // 基础信息字段
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("基础信息")
-                            .font(.subheadline).foregroundColor(.secondary)
+                    // 基础信息
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L("基础信息", "Basics"))
+                            .font(.caption.bold()).foregroundColor(.secondary)
 
                         HStack {
-                            Text("服务标识 (ID):").frame(width: 110, alignment: .trailing)
-                            TextField("如 gpt-load, frpc, redis", text: $id)
+                            Text(L("服务 ID:", "Service ID:")).frame(width: 90, alignment: .trailing)
+                            TextField(L("如 gpt-load, redis", "e.g. gpt-load, redis"), text: $id)
                                 .textFieldStyle(.roundedBorder)
                                 .disabled(serviceToEdit != nil)
                         }
 
                         HStack {
-                            Text("显示名称:").frame(width: 110, alignment: .trailing)
-                            TextField("如 GPT-Load 代理网关", text: $name)
+                            Text(L("显示名称:", "Display Name:")).frame(width: 90, alignment: .trailing)
+                            TextField(L("服务名称", "Service name"), text: $name)
                                 .textFieldStyle(.roundedBorder)
                         }
 
                         if !appPath.isEmpty && FileManager.default.fileExists(atPath: appPath) {
-                            HStack(spacing: 10) {
-                                Text("应用图标:").frame(width: 110, alignment: .trailing)
-                                let img = NSWorkspace.shared.icon(forFile: appPath)
-                                Image(nsImage: img)
-                                    .resizable()
-                                    .interpolation(.high)
-                                    .frame(width: 32, height: 32)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("使用应用自带原生图标")
-                                        .font(.system(size: 12, weight: .medium))
-                                    Text(appPath)
-                                        .font(.caption2).foregroundColor(.secondary)
-                                        .lineLimit(1)
-                                }
+                            HStack(spacing: 8) {
+                                Text(L("图标:", "Icon:")).frame(width: 90, alignment: .trailing)
+                                Image(nsImage: NSWorkspace.shared.icon(forFile: appPath))
+                                    .resizable().frame(width: 24, height: 24)
+                                Text(L("使用 App 原生图标", "Using native app icon")).font(.caption).foregroundColor(.secondary)
                                 Spacer()
-                                Button("清除关联") {
-                                    appPath = ""
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
+                                Button(L("清除", "Clear")) { appPath = "" }
+                                    .buttonStyle(.plain).font(.caption).foregroundColor(.secondary)
                             }
                         } else {
                             HStack {
-                                Text("服务图标:").frame(width: 110, alignment: .trailing)
+                                Text(L("图标:", "Icon:")).frame(width: 90, alignment: .trailing)
                                 Picker("", selection: $icon) {
                                     ForEach(availableIcons, id: \.self) { ic in
                                         Label(ic, systemImage: ic).tag(ic)
                                     }
                                 }
-                                .frame(maxWidth: 200)
+                                .frame(maxWidth: 180)
                             }
                         }
 
                         HStack {
-                            Text("自启与守护:").frame(width: 110, alignment: .trailing)
-                            Toggle("ServiceHub 启动时自动拉起，并在异常退出时自动恢复", isOn: $autoStart)
+                            Text(L("自动保活:", "Keep-alive:")).frame(width: 90, alignment: .trailing)
+                            Toggle(L("异常退出后自动重启", "Auto-restart on crash"), isOn: $autoStart)
                         }
 
                         if autoStart {
-                            HStack(spacing: 8) {
-                                Text("短时间熔断:").frame(width: 110, alignment: .trailing)
-                                Text("在")
-                                Stepper("\(restartWindowSeconds) 秒内", value: $restartWindowSeconds, in: 10...600, step: 10)
-                                    .frame(width: 120)
-                                Text("连续重试超")
-                                Stepper("\(maxRestarts) 次", value: $maxRestarts, in: 1...10)
-                                    .frame(width: 90)
-                                Text("则停止保活")
+                            HStack(spacing: 6) {
+                                Text(L("熔断保护:", "Circuit breaker:")).frame(width: 90, alignment: .trailing)
+                                Stepper(L("\(restartWindowSeconds)s 内", "within \(restartWindowSeconds)s"), value: $restartWindowSeconds, in: 10...600, step: 10)
+                                    .frame(width: 100)
+                                Stepper(L("超 \(maxRestarts) 次则停", "stop after \(maxRestarts) tries"), value: $maxRestarts, in: 1...10)
+                                    .frame(width: 110)
                             }
                             .font(.system(size: 12))
-
-                            HStack {
-                                Spacer().frame(width: 110)
-                                Text("若短时间内频繁崩溃达到该上限，将自动暂停保活防止拖垮系统，直到手动启动成功")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
                         }
 
                         HStack(alignment: .top) {
-                            Text("启动前置条件:").frame(width: 110, alignment: .trailing)
-                            VStack(alignment: .leading, spacing: 6) {
+                            Text(L("前置条件:", "Precondition:")).frame(width: 90, alignment: .trailing)
+                            VStack(alignment: .leading, spacing: 4) {
                                 Picker("", selection: $precondition) {
-                                    Section("通用") {
-                                        Label(PreconditionType.none.displayName, systemImage: PreconditionType.none.systemIcon)
-                                            .tag(PreconditionType.none)
+                                    Section(L("通用", "General")) {
+                                        Label(PreconditionType.none.displayName, systemImage: PreconditionType.none.systemIcon).tag(PreconditionType.none)
                                     }
-                                    Section("网络环境") {
-                                        Label(PreconditionType.networkConnected.displayName, systemImage: PreconditionType.networkConnected.systemIcon)
-                                            .tag(PreconditionType.networkConnected)
-                                        Label(PreconditionType.wifiConnected.displayName, systemImage: PreconditionType.wifiConnected.systemIcon)
-                                            .tag(PreconditionType.wifiConnected)
-                                        Label(PreconditionType.wifiDisconnected.displayName, systemImage: PreconditionType.wifiDisconnected.systemIcon)
-                                            .tag(PreconditionType.wifiDisconnected)
-                                        Label(PreconditionType.networkDisconnected.displayName, systemImage: PreconditionType.networkDisconnected.systemIcon)
-                                            .tag(PreconditionType.networkDisconnected)
-                                        Label(PreconditionType.vpnActive.displayName, systemImage: PreconditionType.vpnActive.systemIcon)
-                                            .tag(PreconditionType.vpnActive)
+                                    Section(L("网络", "Network")) {
+                                        Label(PreconditionType.networkConnected.displayName, systemImage: PreconditionType.networkConnected.systemIcon).tag(PreconditionType.networkConnected)
+                                        Label(PreconditionType.wifiConnected.displayName, systemImage: PreconditionType.wifiConnected.systemIcon).tag(PreconditionType.wifiConnected)
+                                        Label(PreconditionType.wifiDisconnected.displayName, systemImage: PreconditionType.wifiDisconnected.systemIcon).tag(PreconditionType.wifiDisconnected)
+                                        Label(PreconditionType.networkDisconnected.displayName, systemImage: PreconditionType.networkDisconnected.systemIcon).tag(PreconditionType.networkDisconnected)
+                                        Label(PreconditionType.vpnActive.displayName, systemImage: PreconditionType.vpnActive.systemIcon).tag(PreconditionType.vpnActive)
                                     }
-                                    Section("蓝牙设置") {
-                                        Label(PreconditionType.bluetoothOn.displayName, systemImage: PreconditionType.bluetoothOn.systemIcon)
-                                            .tag(PreconditionType.bluetoothOn)
-                                        Label(PreconditionType.bluetoothOff.displayName, systemImage: PreconditionType.bluetoothOff.systemIcon)
-                                            .tag(PreconditionType.bluetoothOff)
-                                        Label(PreconditionType.bluetoothConnected.displayName, systemImage: PreconditionType.bluetoothConnected.systemIcon)
-                                            .tag(PreconditionType.bluetoothConnected)
+                                    Section(L("硬件与电源", "Hardware & Power")) {
+                                        Label(PreconditionType.acPower.displayName, systemImage: PreconditionType.acPower.systemIcon).tag(PreconditionType.acPower)
+                                        Label(PreconditionType.onBattery.displayName, systemImage: PreconditionType.onBattery.systemIcon).tag(PreconditionType.onBattery)
+                                        Label(PreconditionType.externalDisplay.displayName, systemImage: PreconditionType.externalDisplay.systemIcon).tag(PreconditionType.externalDisplay)
+                                        Label(PreconditionType.volumeMounted.displayName, systemImage: PreconditionType.volumeMounted.systemIcon).tag(PreconditionType.volumeMounted)
+                                        Label(PreconditionType.bluetoothOn.displayName, systemImage: PreconditionType.bluetoothOn.systemIcon).tag(PreconditionType.bluetoothOn)
+                                        Label(PreconditionType.bluetoothConnected.displayName, systemImage: PreconditionType.bluetoothConnected.systemIcon).tag(PreconditionType.bluetoothConnected)
                                     }
-                                    Section("电源与外设") {
-                                        Label(PreconditionType.acPower.displayName, systemImage: PreconditionType.acPower.systemIcon)
-                                            .tag(PreconditionType.acPower)
-                                        Label(PreconditionType.onBattery.displayName, systemImage: PreconditionType.onBattery.systemIcon)
-                                            .tag(PreconditionType.onBattery)
-                                        Label(PreconditionType.externalDisplay.displayName, systemImage: PreconditionType.externalDisplay.systemIcon)
-                                            .tag(PreconditionType.externalDisplay)
-                                        Label(PreconditionType.volumeMounted.displayName, systemImage: PreconditionType.volumeMounted.systemIcon)
-                                            .tag(PreconditionType.volumeMounted)
-                                    }
-                                    Section("高级检测") {
-                                        Label(PreconditionType.portAvailable.displayName, systemImage: PreconditionType.portAvailable.systemIcon)
-                                            .tag(PreconditionType.portAvailable)
-                                        Label(PreconditionType.hostReachable.displayName, systemImage: PreconditionType.hostReachable.systemIcon)
-                                            .tag(PreconditionType.hostReachable)
-                                        Label(PreconditionType.custom.displayName, systemImage: PreconditionType.custom.systemIcon)
-                                            .tag(PreconditionType.custom)
+                                    Section(L("高级", "Advanced")) {
+                                        Label(PreconditionType.portAvailable.displayName, systemImage: PreconditionType.portAvailable.systemIcon).tag(PreconditionType.portAvailable)
+                                        Label(PreconditionType.hostReachable.displayName, systemImage: PreconditionType.hostReachable.systemIcon).tag(PreconditionType.hostReachable)
+                                        Label(PreconditionType.custom.displayName, systemImage: PreconditionType.custom.systemIcon).tag(PreconditionType.custom)
                                     }
                                 }
-                                .frame(maxWidth: 320)
+                                .frame(maxWidth: 280)
 
                                 if let prompt = precondition.paramPrompt {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        TextField(prompt, text: $preconditionParam)
-                                            .textFieldStyle(.roundedBorder)
-                                        Text(prompt)
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    .padding(.top, 2)
-                                } else if precondition != .none {
-                                    Text("守护引擎将在条件达成（如 Wi-Fi/外网连接成功）后才自动触发启动")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
+                                    TextField(prompt, text: $preconditionParam)
+                                        .textFieldStyle(.roundedBorder)
                                 }
                             }
                         }
@@ -376,17 +271,17 @@ struct ServiceEditorSheet: View {
 
                     Divider()
 
-                    // 控制与状态命令
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("控制与状态命令")
-                            .font(.subheadline).foregroundColor(.secondary)
+                    // 控制命令
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L("控制命令", "Commands"))
+                            .font(.caption.bold()).foregroundColor(.secondary)
 
                         HStack {
-                            Text("启动命令:").frame(width: 110, alignment: .trailing)
-                            TextField("必填，如 /path/run.sh start 或 open -a App", text: $startCommand)
+                            Text(L("启动命令:", "Start command:")).frame(width: 90, alignment: .trailing)
+                            TextField(L("如 /path/to/start.sh 或 open -a App", "e.g. /path/to/start.sh or open -a App"), text: $startCommand)
                                 .textFieldStyle(.roundedBorder)
-                            Button("浏览文件...") {
-                                if let path = AppPickerHelper.pickFile(title: "选择启动脚本或程序") {
+                            Button(L("浏览...", "Browse...")) {
+                                if let path = AppPickerHelper.pickFile(title: L("选择启动文件", "Choose Start File")) {
                                     startCommand = path
                                 }
                             }
@@ -394,11 +289,11 @@ struct ServiceEditorSheet: View {
                         }
 
                         HStack {
-                            Text("停止命令:").frame(width: 110, alignment: .trailing)
-                            TextField("选填，如 /path/run.sh stop 或 killall App", text: $stopCommand)
+                            Text(L("停止命令:", "Stop command:")).frame(width: 90, alignment: .trailing)
+                            TextField(L("选填，如 /path/to/stop.sh", "Optional, e.g. /path/to/stop.sh"), text: $stopCommand)
                                 .textFieldStyle(.roundedBorder)
-                            Button("浏览文件...") {
-                                if let path = AppPickerHelper.pickFile(title: "选择停止脚本") {
+                            Button(L("浏览...", "Browse...")) {
+                                if let path = AppPickerHelper.pickFile(title: L("选择停止脚本", "Choose Stop Script")) {
                                     stopCommand = path
                                 }
                             }
@@ -406,71 +301,144 @@ struct ServiceEditorSheet: View {
                         }
 
                         HStack {
-                            Text("状态检测命令:").frame(width: 110, alignment: .trailing)
-                            TextField("选填，退出码为 0 则视为正在运行", text: $statusCommand)
+                            Text(L("状态命令:", "Status command:")).frame(width: 90, alignment: .trailing)
+                            TextField(L("选填，退出码 0 视为运行中", "Optional; exit code 0 means running"), text: $statusCommand)
                                 .textFieldStyle(.roundedBorder)
                         }
                     }
 
                     Divider()
 
-                    // 日志与探活
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("日志与探活")
-                            .font(.subheadline).foregroundColor(.secondary)
+                    // 主页与日志
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L("主页与探活", "Homepage & Health"))
+                            .font(.caption.bold()).foregroundColor(.secondary)
 
                         HStack {
-                            Text("日志文件路径:").frame(width: 110, alignment: .trailing)
-                            TextField("选填，如 /Users/.../app.log", text: $logPath)
+                            Text(L("服务主页:", "Homepage:")).frame(width: 90, alignment: .trailing)
+                            TextField(L("选填，如 http://localhost:3001", "Optional, e.g. http://localhost:3001"), text: $webURL)
                                 .textFieldStyle(.roundedBorder)
-                            Button("浏览日志...") {
-                                if let path = AppPickerHelper.pickFile(title: "选择日志文件") {
+
+                            if !webURL.trimmingCharacters(in: .whitespaces).isEmpty,
+                               let url = URL(string: webURL) {
+                                Button(L("打开", "Open")) { NSWorkspace.shared.open(url) }
+                                    .buttonStyle(.bordered).controlSize(.small)
+                            }
+                        }
+
+                        HStack {
+                            Spacer().frame(width: 90)
+                            Toggle(L("启动成功后自动在浏览器打开", "Open in browser after start"), isOn: $openWebURLOnStart)
+                                .font(.system(size: 11))
+                        }
+
+                        HStack {
+                            Text(L("HTTP 探活:", "HTTP health check:")).frame(width: 90, alignment: .trailing)
+                            TextField(L("选填，如 http://127.0.0.1:3001/health", "Optional, e.g. http://127.0.0.1:3001/health"), text: $healthCheckURL)
+                                .textFieldStyle(.roundedBorder)
+                        }
+
+                        HStack {
+                            Text(L("日志路径:", "Log path:")).frame(width: 90, alignment: .trailing)
+                            TextField(L("选填，日志文件绝对路径", "Optional, absolute path to log file"), text: $logPath)
+                                .textFieldStyle(.roundedBorder)
+                            Button(L("浏览...", "Browse...")) {
+                                if let path = AppPickerHelper.pickFile(title: L("选择日志文件", "Choose Log File")) {
                                     logPath = path
                                 }
                             }
                             .buttonStyle(.bordered)
                         }
+                    }
 
-                        HStack {
-                            Text("HTTP 探活地址:").frame(width: 110, alignment: .trailing)
-                            TextField("选填，如 http://127.0.0.1:3001/health", text: $healthCheckURL)
-                                .textFieldStyle(.roundedBorder)
+                    Divider()
+
+                    // Cloudflare Tunnel —— 依赖服务主页作为穿透目标，须先配置主页
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L("公网映射 (Cloudflare Tunnel)", "Public URL (Cloudflare Tunnel)"))
+                            .font(.caption.bold()).foregroundColor(.secondary)
+
+                        if webURL.trimmingCharacters(in: .whitespaces).isEmpty {
+                            HStack(spacing: 6) {
+                                Image(systemName: "info.circle")
+                                    .foregroundColor(.secondary)
+                                Text(L("请先在上方填写「服务主页」，公网穿透将把该地址暴露到公网", "Fill in the Homepage above first — the tunnel exposes that address to the public internet"))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        } else {
+                            HStack {
+                                Text(L("公网穿透:", "Tunnel:")).frame(width: 90, alignment: .trailing)
+                                Toggle(L("随服务启动自动开启", "Start automatically with the service"), isOn: $tunnelEnabled)
+                            }
+
+                            if tunnelEnabled {
+                            HStack {
+                                Text(L("模式:", "Mode:")).frame(width: 90, alignment: .trailing)
+                                Picker("", selection: $tunnelMode) {
+                                    ForEach(TunnelMode.allCases, id: \.self) { m in
+                                        Text(m.displayName).tag(m)
+                                    }
+                                }
+                                .frame(maxWidth: 280)
+                            }
+
+                            if tunnelMode == .token {
+                                HStack {
+                                    Text(L("自定义域名:", "Custom domain:")).frame(width: 90, alignment: .trailing)
+                                    TextField(L("如 gpt.mydomain.com", "e.g. gpt.mydomain.com"), text: $tunnelCustomDomain)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                HStack {
+                                    Text("Token:").frame(width: 90, alignment: .trailing)
+                                    SecureField("Cloudflare Tunnel Token", text: $tunnelToken)
+                                        .textFieldStyle(.roundedBorder)
+                                    Button(L("获取 Token ↗", "Get Token ↗")) {
+                                        if let u = URL(string: "https://one.dash.cloudflare.com/") {
+                                            NSWorkspace.shared.open(u)
+                                        }
+                                    }
+                                    .buttonStyle(.bordered).controlSize(.small)
+                                }
+                            }
+
+                                HStack {
+                                    Text(L("本地目标:", "Local target:")).frame(width: 90, alignment: .trailing)
+                                    TextField(L("选填，默认使用服务主页或 127.0.0.1:3001", "Optional; defaults to homepage or 127.0.0.1:3001"), text: $tunnelTarget)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+                            }
                         }
                     }
 
-                    // 启动命令测试运行区
+                    // 启动命令测试
                     if !startCommand.trimmingCharacters(in: .whitespaces).isEmpty {
                         Divider()
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Button(action: testRunCommand) {
-                                    if isTesting {
-                                        ProgressView().controlSize(.small)
-                                        Text("执行中...")
-                                    } else {
-                                        Image(systemName: "play.circle")
-                                        Text("测试运行启动命令")
-                                    }
+                        HStack {
+                            Button(action: testRunCommand) {
+                                if isTesting {
+                                    ProgressView().controlSize(.small)
+                                    Text(L("执行中...", "Running..."))
+                                } else {
+                                    Label(L("测试运行启动命令", "Test Start Command"), systemImage: "play.circle")
                                 }
-                                .disabled(isTesting)
-
-                                Spacer()
                             }
+                            .disabled(isTesting)
+                            Spacer()
+                        }
 
-                            if let output = testOutput {
-                                Text("测试返回:")
-                                    .font(.caption).foregroundColor(.secondary)
-                                ScrollView {
-                                    Text(output)
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .textSelection(.enabled)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(8)
-                                }
-                                .frame(height: 100)
-                                .background(Color(NSColor.textBackgroundColor))
-                                .cornerRadius(6)
+                        if let output = testOutput {
+                            ScrollView {
+                                Text(output)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(6)
                             }
+                            .frame(height: 80)
+                            .background(Color(NSColor.textBackgroundColor))
+                            .cornerRadius(5)
                         }
                     }
                 }
@@ -482,7 +450,7 @@ struct ServiceEditorSheet: View {
             // 底部保存按钮
             HStack {
                 Spacer()
-                Button("保存配置") {
+                Button(L("保存", "Save")) {
                     saveAction()
                 }
                 .buttonStyle(.borderedProminent)
@@ -490,9 +458,9 @@ struct ServiceEditorSheet: View {
                           name.trimmingCharacters(in: .whitespaces).isEmpty ||
                           startCommand.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .padding()
+            .padding(12)
         }
-        .frame(minWidth: 580, minHeight: 620)
+        .frame(width: 520, height: 600)
         .onAppear {
             if let s = serviceToEdit {
                 id = s.id
@@ -509,6 +477,15 @@ struct ServiceEditorSheet: View {
                 statusCommand = s.statusCommand ?? ""
                 logPath = s.logPath ?? ""
                 healthCheckURL = s.healthCheckURL ?? ""
+                webURL = s.webURL ?? ""
+                openWebURLOnStart = s.openWebURLOnStart
+                if let tc = s.tunnelConfig {
+                    tunnelEnabled = tc.enabled
+                    tunnelMode = tc.mode
+                    tunnelCustomDomain = tc.customDomain ?? ""
+                    tunnelToken = tc.token ?? ""
+                    tunnelTarget = tc.targetURL ?? ""
+                }
             }
         }
     }
@@ -526,6 +503,25 @@ struct ServiceEditorSheet: View {
         } else {
             icon = "gearshape"
         }
+    }
+
+    private func scanBrewServices() {
+        isScanningBrew = true
+        Task {
+            let list = await BrewScanner.scanInstalledServices()
+            isScanningBrew = false
+            scannedBrewServices = list
+        }
+    }
+
+    private func applyBrewItem(_ item: BrewServiceItem) {
+        let trimmed = item.name
+        id = trimmed
+        name = "\(trimmed.capitalized) (Homebrew)"
+        icon = item.recommendedIcon
+        startCommand = "/opt/homebrew/bin/brew services start \(trimmed)"
+        stopCommand = "/opt/homebrew/bin/brew services stop \(trimmed)"
+        statusCommand = "/opt/homebrew/bin/brew services list | grep \"\(trimmed)\" | grep started"
     }
 
     private func scanDockerContainers() {
@@ -553,37 +549,6 @@ struct ServiceEditorSheet: View {
         statusCommand = "\(dockerPath) inspect -f '{{.State.Running}}' \(trimmed) | grep -q \"true\""
     }
 
-    private func applyManualDocker(_ rawName: String) {
-        let trimmed = rawName.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "/", with: "")
-        guard !trimmed.isEmpty else { return }
-        id = trimmed
-        name = "\(trimmed.capitalized) (Docker)"
-        icon = "shippingbox.fill"
-        let dockerPath = DockerScanner.findDockerPath()
-        startCommand = "\(dockerPath) start \(trimmed)"
-        stopCommand = "\(dockerPath) stop \(trimmed)"
-        statusCommand = "\(dockerPath) inspect -f '{{.State.Running}}' \(trimmed) | grep -q \"true\""
-    }
-
-    private func scanBrewServices() {
-        isScanningBrew = true
-        Task {
-            let list = await BrewScanner.scanInstalledServices()
-            isScanningBrew = false
-            scannedBrewServices = list
-        }
-    }
-
-    private func applyBrewItem(_ item: BrewServiceItem) {
-        let trimmed = item.name
-        id = trimmed
-        name = "\(trimmed.capitalized) (Homebrew)"
-        icon = item.recommendedIcon
-        startCommand = "/opt/homebrew/bin/brew services start \(trimmed)"
-        stopCommand = "/opt/homebrew/bin/brew services stop \(trimmed)"
-        statusCommand = "/opt/homebrew/bin/brew services list | grep \"\(trimmed)\" | grep started"
-    }
-
     @MainActor
     private func pickAppAction() {
         guard let meta = AppPickerHelper.pickApplication() else { return }
@@ -602,11 +567,23 @@ struct ServiceEditorSheet: View {
         Task {
             let res = await ProcessRunner.run(command: startCommand, timeout: 10)
             isTesting = false
-            testOutput = "退出码: \(res.exitCode)\n\(res.output)"
+            testOutput = L("退出码: \(res.exitCode)\n\(res.output)", "Exit code: \(res.exitCode)\n\(res.output)")
         }
     }
 
     private func saveAction() {
+        var tc: TunnelConfig? = nil
+        // 公网穿透依赖服务主页作为穿透目标：未配置主页时忽略隧道配置
+        if tunnelEnabled && !webURL.trimmingCharacters(in: .whitespaces).isEmpty {
+            tc = TunnelConfig(
+                enabled: true,
+                mode: tunnelMode,
+                token: tunnelToken.isEmpty ? nil : tunnelToken.trimmingCharacters(in: .whitespacesAndNewlines),
+                customDomain: tunnelCustomDomain.isEmpty ? nil : tunnelCustomDomain.trimmingCharacters(in: .whitespacesAndNewlines),
+                targetURL: tunnelTarget.isEmpty ? nil : tunnelTarget.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        }
+
         let service = Service(
             id: id.trimmingCharacters(in: .whitespacesAndNewlines),
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -621,7 +598,10 @@ struct ServiceEditorSheet: View {
             stopCommand: stopCommand.isEmpty ? nil : stopCommand.trimmingCharacters(in: .whitespacesAndNewlines),
             statusCommand: statusCommand.isEmpty ? nil : statusCommand.trimmingCharacters(in: .whitespacesAndNewlines),
             logPath: logPath.isEmpty ? nil : logPath.trimmingCharacters(in: .whitespacesAndNewlines),
-            healthCheckURL: healthCheckURL.isEmpty ? nil : healthCheckURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            healthCheckURL: healthCheckURL.isEmpty ? nil : healthCheckURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            webURL: webURL.isEmpty ? nil : webURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            openWebURLOnStart: openWebURLOnStart,
+            tunnelConfig: tc
         )
         onSave(service)
         dismiss()

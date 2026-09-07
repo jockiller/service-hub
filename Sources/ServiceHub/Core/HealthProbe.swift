@@ -142,13 +142,13 @@ public final class HealthProbe {
         // etime 格式可能是: [[dd-]hh:]mm:ss
         let components = etime.components(separatedBy: "-")
         if components.count == 2 {
-            return "\(components[0])天 \(components[1])"
+            return uptimeIsEnglish() ? "\(components[0])d \(components[1])" : "\(components[0])天 \(components[1])"
         }
         let timeParts = etime.components(separatedBy: ":")
         if timeParts.count == 3 {
-            return "\(timeParts[0])小时 \(timeParts[1])分"
+            return uptimeIsEnglish() ? "\(timeParts[0])h \(timeParts[1])m" : "\(timeParts[0])小时 \(timeParts[1])分"
         } else if timeParts.count == 2 {
-            return "\(timeParts[0])分 \(timeParts[1])秒"
+            return uptimeIsEnglish() ? "\(timeParts[0])m \(timeParts[1])s" : "\(timeParts[0])分 \(timeParts[1])秒"
         }
         return etime
     }
@@ -157,17 +157,17 @@ public final class HealthProbe {
         guard let date = date else { return nil }
         let interval = Date().timeIntervalSince(date)
         if interval < 60 {
-            return "刚刚"
+            return uptimeIsEnglish() ? "just now" : "刚刚"
         } else if interval < 3600 {
-            return "\(Int(interval / 60)) 分钟"
+            return "\(Int(interval / 60)) \(uptimeIsEnglish() ? "min" : "分钟")"
         } else if interval < 86400 {
             let hours = Int(interval / 3600)
             let mins = Int((interval.truncatingRemainder(dividingBy: 3600)) / 60)
-            return "\(hours) 小时 \(mins) 分"
+            return "\(hours) \(uptimeIsEnglish() ? "h" : "小时") \(mins) \(uptimeIsEnglish() ? "m" : "分")"
         } else {
             let days = Int(interval / 86400)
             let hours = Int((interval.truncatingRemainder(dividingBy: 86400)) / 3600)
-            return "\(days) 天 \(hours) 小时"
+            return "\(days) \(uptimeIsEnglish() ? "d" : "天") \(hours) \(uptimeIsEnglish() ? "h" : "小时")"
         }
     }
 }

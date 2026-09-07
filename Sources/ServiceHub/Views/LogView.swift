@@ -11,7 +11,7 @@ struct LogView: View {
             HStack(spacing: 12) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
-                TextField("过滤日志关键词...", text: $logTail.filterText)
+                TextField(L("过滤日志关键词...", "Filter logs..."), text: $logTail.filterText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
 
@@ -26,7 +26,7 @@ struct LogView: View {
                 Spacer()
 
                 Toggle(isOn: $logTail.isFollowing) {
-                    Label("跟踪滚动", systemImage: "arrow.down.to.line")
+                    Label(L("跟踪滚动", "Follow"), systemImage: "arrow.down.to.line")
                         .font(.system(size: 11))
                 }
                 .toggleStyle(.checkbox)
@@ -35,7 +35,7 @@ struct LogView: View {
                     Button(action: {
                         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: logPath)])
                     }) {
-                        Label("在访达中显示", systemImage: "folder")
+                        Label(L("在访达中显示", "Reveal in Finder"), systemImage: "folder")
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.bordered)

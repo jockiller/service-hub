@@ -34,11 +34,11 @@ public final class DockerScanner {
         if !res.isSuccess {
             let out = res.output
             if out.contains("Cannot connect to the Docker daemon") || out.contains("docker daemon is not running") {
-                return (false, [], "Docker 守护进程未启动，请先打开 Docker Desktop 或 OrbStack")
+                return (false, [], dockerDaemonMsg())
             } else if out.contains("command not found") || out.contains("No such file") {
-                return (false, [], "本机未检测到 Docker 环境，请先安装 Docker")
+                return (false, [], dockerNotInstalledMsg())
             }
-            return (false, [], out.components(separatedBy: .newlines).first ?? "Docker 调用失败")
+            return (false, [], out.components(separatedBy: .newlines).first ?? dockerCallFailedMsg())
         }
 
         struct RawContainer: Decodable {
