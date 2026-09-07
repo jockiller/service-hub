@@ -8,9 +8,19 @@ public final class AppSettings: ObservableObject {
     public static let shared = AppSettings()
 
     @AppStorage("probeInterval") public var probeInterval: Double = 6.0
-    @AppStorage("hideDockIcon") public var hideDockIcon: Bool = false
-    @AppStorage("showMenuBarIcon") public var showMenuBarIcon: Bool = true
     @AppStorage("customConfigPath") public var customConfigPath: String = ""
+
+    @Published public var hideDockIcon: Bool = UserDefaults.standard.bool(forKey: "hideDockIcon") {
+        didSet {
+            UserDefaults.standard.set(hideDockIcon, forKey: "hideDockIcon")
+        }
+    }
+
+    @Published public var showMenuBarIcon: Bool = (UserDefaults.standard.object(forKey: "showMenuBarIcon") as? Bool) ?? true {
+        didSet {
+            UserDefaults.standard.set(showMenuBarIcon, forKey: "showMenuBarIcon")
+        }
+    }
 
     @Published public var isLaunchAtLoginEnabled: Bool = false
 
@@ -22,7 +32,7 @@ public final class AppSettings: ObservableObject {
     public init() {
         checkLaunchAtLoginStatus()
         if hideDockIcon {
-            DispatchQueue.main.async { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 self?.applyDockActivationPolicy()
             }
         }
@@ -44,8 +54,10 @@ public final class AppSettings: ObservableObject {
         if hide && !showMenuBarIcon {
             return false
         }
-        self.hideDockIcon = hide
-        applyDockActivationPolicy()
+        if self.hideDockIcon != hide {
+            self.hideDockIcon = hide
+            applyDockActivationPolicy()
+        }
         return true
     }
 
@@ -54,7 +66,9 @@ public final class AppSettings: ObservableObject {
         if !show && hideDockIcon {
             return false
         }
-        self.showMenuBarIcon = show
+        if self.showMenuBarIcon != show {
+            self.showMenuBarIcon = show
+        }
         return true
     }
 

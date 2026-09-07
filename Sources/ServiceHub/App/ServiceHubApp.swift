@@ -6,6 +6,17 @@ struct ServiceHubApp: App {
     @StateObject private var supervisor = Supervisor.shared
     @StateObject private var settings = AppSettings.shared
 
+    private var safeMenuBarBinding: Binding<Bool> {
+        Binding(
+            get: { settings.showMenuBarIcon },
+            set: { val in
+                if settings.showMenuBarIcon != val {
+                    _ = settings.setShowMenuBarIcon(val)
+                }
+            }
+        )
+    }
+
     var body: some Scene {
         // 主程序窗口
         WindowGroup("ServiceHub", id: "main") {
@@ -22,8 +33,8 @@ struct ServiceHubApp: App {
             SettingsView()
         }
 
-        // 顶部菜单栏常驻图标 (支持 isInserted 动态显隐开关)
-        MenuBarExtra(isInserted: $settings.showMenuBarIcon) {
+        // 顶部菜单栏常驻图标 (使用安全防重绑定，彻底杜绝递归死循环)
+        MenuBarExtra(isInserted: safeMenuBarBinding) {
             MenuBarView()
         } label: {
             let hasError = store.services.contains(where: { supervisor.statuses[$0.id] == .failed })
