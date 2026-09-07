@@ -52,9 +52,19 @@ struct ServiceListView: View {
                             .frame(width: 90, alignment: .leading)
                     }
 
-                    // 启动时间 / 运行时长
+                    // 启动时间 / 运行时长 / 前置条件
                     if let uptime = rt?.uptime, st == .running {
                         Label(uptime, systemImage: "clock")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .frame(width: 120, alignment: .leading)
+                    } else if st == .waitingPrecondition {
+                        Label(rt?.uptime ?? "等待条件", systemImage: "hourglass")
+                            .font(.system(size: 11))
+                            .foregroundColor(.orange)
+                            .frame(width: 120, alignment: .leading)
+                    } else if s.precondition != .none {
+                        Text("[\(s.precondition.shortName)]")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                             .frame(width: 120, alignment: .leading)

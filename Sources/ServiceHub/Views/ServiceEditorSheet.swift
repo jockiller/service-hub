@@ -11,7 +11,7 @@ struct ServiceEditorSheet: View {
     @State private var appPath: String = ""
     @State private var autoStart: Bool = true
     @State private var precondition: PreconditionType = .none
-    @State private var preconditionCustomCommand: String = ""
+    @State private var preconditionParam: String = ""
     @State private var startCommand: String = ""
     @State private var stopCommand: String = ""
     @State private var statusCommand: String = ""
@@ -206,17 +206,62 @@ struct ServiceEditorSheet: View {
                             Text("启动前置条件:").frame(width: 110, alignment: .trailing)
                             VStack(alignment: .leading, spacing: 6) {
                                 Picker("", selection: $precondition) {
-                                    ForEach(PreconditionType.allCases, id: \.self) { p in
-                                        Text(p.displayName).tag(p)
+                                    Section("通用") {
+                                        Label(PreconditionType.none.displayName, systemImage: PreconditionType.none.systemIcon)
+                                            .tag(PreconditionType.none)
+                                    }
+                                    Section("网络环境") {
+                                        Label(PreconditionType.networkConnected.displayName, systemImage: PreconditionType.networkConnected.systemIcon)
+                                            .tag(PreconditionType.networkConnected)
+                                        Label(PreconditionType.wifiConnected.displayName, systemImage: PreconditionType.wifiConnected.systemIcon)
+                                            .tag(PreconditionType.wifiConnected)
+                                        Label(PreconditionType.wifiDisconnected.displayName, systemImage: PreconditionType.wifiDisconnected.systemIcon)
+                                            .tag(PreconditionType.wifiDisconnected)
+                                        Label(PreconditionType.networkDisconnected.displayName, systemImage: PreconditionType.networkDisconnected.systemIcon)
+                                            .tag(PreconditionType.networkDisconnected)
+                                        Label(PreconditionType.vpnActive.displayName, systemImage: PreconditionType.vpnActive.systemIcon)
+                                            .tag(PreconditionType.vpnActive)
+                                    }
+                                    Section("蓝牙设置") {
+                                        Label(PreconditionType.bluetoothOn.displayName, systemImage: PreconditionType.bluetoothOn.systemIcon)
+                                            .tag(PreconditionType.bluetoothOn)
+                                        Label(PreconditionType.bluetoothOff.displayName, systemImage: PreconditionType.bluetoothOff.systemIcon)
+                                            .tag(PreconditionType.bluetoothOff)
+                                        Label(PreconditionType.bluetoothConnected.displayName, systemImage: PreconditionType.bluetoothConnected.systemIcon)
+                                            .tag(PreconditionType.bluetoothConnected)
+                                    }
+                                    Section("电源与外设") {
+                                        Label(PreconditionType.acPower.displayName, systemImage: PreconditionType.acPower.systemIcon)
+                                            .tag(PreconditionType.acPower)
+                                        Label(PreconditionType.onBattery.displayName, systemImage: PreconditionType.onBattery.systemIcon)
+                                            .tag(PreconditionType.onBattery)
+                                        Label(PreconditionType.externalDisplay.displayName, systemImage: PreconditionType.externalDisplay.systemIcon)
+                                            .tag(PreconditionType.externalDisplay)
+                                        Label(PreconditionType.volumeMounted.displayName, systemImage: PreconditionType.volumeMounted.systemIcon)
+                                            .tag(PreconditionType.volumeMounted)
+                                    }
+                                    Section("高级检测") {
+                                        Label(PreconditionType.portAvailable.displayName, systemImage: PreconditionType.portAvailable.systemIcon)
+                                            .tag(PreconditionType.portAvailable)
+                                        Label(PreconditionType.hostReachable.displayName, systemImage: PreconditionType.hostReachable.systemIcon)
+                                            .tag(PreconditionType.hostReachable)
+                                        Label(PreconditionType.custom.displayName, systemImage: PreconditionType.custom.systemIcon)
+                                            .tag(PreconditionType.custom)
                                     }
                                 }
                                 .frame(maxWidth: 320)
 
-                                if precondition == .custom {
-                                    TextField("输入检测命令（退出码为 0 则视为条件满足）", text: $preconditionCustomCommand)
-                                        .textFieldStyle(.roundedBorder)
+                                if let prompt = precondition.paramPrompt {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        TextField(prompt, text: $preconditionParam)
+                                            .textFieldStyle(.roundedBorder)
+                                        Text(prompt)
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(.top, 2)
                                 } else if precondition != .none {
-                                    Text("守护引擎将在前置条件达成后（如 Wi-Fi/外网连接成功）才自动触发启动")
+                                    Text("守护引擎将在条件达成（如 Wi-Fi/外网连接成功）后才自动触发启动")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                 }
@@ -351,7 +396,7 @@ struct ServiceEditorSheet: View {
                 appPath = s.appPath ?? ""
                 autoStart = s.autoStart
                 precondition = s.precondition
-                preconditionCustomCommand = s.preconditionCustomCommand ?? ""
+                preconditionParam = s.preconditionParam ?? ""
                 startCommand = s.startCommand
                 stopCommand = s.stopCommand ?? ""
                 statusCommand = s.statusCommand ?? ""
@@ -421,7 +466,7 @@ struct ServiceEditorSheet: View {
             appPath: appPath.isEmpty ? nil : appPath.trimmingCharacters(in: .whitespacesAndNewlines),
             autoStart: autoStart,
             precondition: precondition,
-            preconditionCustomCommand: preconditionCustomCommand.isEmpty ? nil : preconditionCustomCommand.trimmingCharacters(in: .whitespacesAndNewlines),
+            preconditionParam: preconditionParam.isEmpty ? nil : preconditionParam.trimmingCharacters(in: .whitespacesAndNewlines),
             startCommand: startCommand.trimmingCharacters(in: .whitespacesAndNewlines),
             stopCommand: stopCommand.isEmpty ? nil : stopCommand.trimmingCharacters(in: .whitespacesAndNewlines),
             statusCommand: statusCommand.isEmpty ? nil : statusCommand.trimmingCharacters(in: .whitespacesAndNewlines),
