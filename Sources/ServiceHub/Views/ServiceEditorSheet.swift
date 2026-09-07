@@ -8,6 +8,7 @@ struct ServiceEditorSheet: View {
     @State private var id: String = ""
     @State private var name: String = ""
     @State private var icon: String = "gearshape"
+    @State private var appPath: String = ""
     @State private var autoStart: Bool = true
     @State private var startCommand: String = ""
     @State private var stopCommand: String = ""
@@ -160,14 +161,38 @@ struct ServiceEditorSheet: View {
                                 .textFieldStyle(.roundedBorder)
                         }
 
-                        HStack {
-                            Text("服务图标:").frame(width: 110, alignment: .trailing)
-                            Picker("", selection: $icon) {
-                                ForEach(availableIcons, id: \.self) { ic in
-                                    Label(ic, systemImage: ic).tag(ic)
+                        if !appPath.isEmpty && FileManager.default.fileExists(atPath: appPath) {
+                            HStack(spacing: 10) {
+                                Text("应用图标:").frame(width: 110, alignment: .trailing)
+                                let img = NSWorkspace.shared.icon(forFile: appPath)
+                                Image(nsImage: img)
+                                    .resizable()
+                                    .interpolation(.high)
+                                    .frame(width: 32, height: 32)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("使用应用自带原生图标")
+                                        .font(.system(size: 12, weight: .medium))
+                                    Text(appPath)
+                                        .font(.caption2).foregroundColor(.secondary)
+                                        .lineLimit(1)
                                 }
+                                Spacer()
+                                Button("清除关联") {
+                                    appPath = ""
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
                             }
-                            .frame(maxWidth: 200)
+                        } else {
+                            HStack {
+                                Text("服务图标:").frame(width: 110, alignment: .trailing)
+                                Picker("", selection: $icon) {
+                                    ForEach(availableIcons, id: \.self) { ic in
+                                        Label(ic, systemImage: ic).tag(ic)
+                                    }
+                                }
+                                .frame(maxWidth: 200)
+                            }
                         }
 
                         HStack {
@@ -300,6 +325,7 @@ struct ServiceEditorSheet: View {
                 id = s.id
                 name = s.name
                 icon = s.icon
+                appPath = s.appPath ?? ""
                 autoStart = s.autoStart
                 startCommand = s.startCommand
                 stopCommand = s.stopCommand ?? ""
@@ -346,6 +372,7 @@ struct ServiceEditorSheet: View {
         id = meta.executableName.lowercased().replacingOccurrences(of: " ", with: "-")
         name = meta.appName
         icon = "app.fill"
+        appPath = meta.appPath
         startCommand = meta.recommendedStartCmd
         stopCommand = meta.recommendedStopCmd
         statusCommand = meta.recommendedStatusCmd
@@ -366,6 +393,7 @@ struct ServiceEditorSheet: View {
             id: id.trimmingCharacters(in: .whitespacesAndNewlines),
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             icon: icon,
+            appPath: appPath.isEmpty ? nil : appPath.trimmingCharacters(in: .whitespacesAndNewlines),
             autoStart: autoStart,
             startCommand: startCommand.trimmingCharacters(in: .whitespacesAndNewlines),
             stopCommand: stopCommand.isEmpty ? nil : stopCommand.trimmingCharacters(in: .whitespacesAndNewlines),

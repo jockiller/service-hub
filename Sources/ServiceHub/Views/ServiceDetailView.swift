@@ -12,10 +12,7 @@ struct ServiceDetailView: View {
         VStack(spacing: 0) {
             // 顶部信息栏
             HStack(alignment: .center, spacing: 16) {
-                Image(systemName: service.icon)
-                    .font(.system(size: 36))
-                    .foregroundColor(.accentColor)
-                    .frame(width: 48, height: 48)
+                ServiceIconView(service: service, size: 48)
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {

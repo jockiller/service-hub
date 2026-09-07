@@ -51,6 +51,7 @@ public struct Service: Identifiable, Codable, Equatable, Hashable {
     public var id: String
     public var name: String
     public var icon: String
+    public var appPath: String?
     public var autoStart: Bool
     public var startCommand: String
     public var stopCommand: String?
@@ -62,6 +63,7 @@ public struct Service: Identifiable, Codable, Equatable, Hashable {
         id: String,
         name: String,
         icon: String = "gearshape",
+        appPath: String? = nil,
         autoStart: Bool = true,
         startCommand: String,
         stopCommand: String? = nil,
@@ -72,6 +74,7 @@ public struct Service: Identifiable, Codable, Equatable, Hashable {
         self.id = id
         self.name = name
         self.icon = icon
+        self.appPath = appPath
         self.autoStart = autoStart
         self.startCommand = startCommand
         self.stopCommand = stopCommand

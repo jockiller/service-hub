@@ -6,10 +6,7 @@ struct ServiceRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: service.icon)
-                .font(.system(size: 16))
-                .foregroundColor(.accentColor)
-                .frame(width: 24, height: 24)
+            ServiceIconView(service: service, size: 24)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(service.name)
