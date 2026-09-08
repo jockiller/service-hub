@@ -105,8 +105,7 @@ struct MainWindow: View {
                         Button(L("切断全部公网", "Disconnect All")) {
                             tunnelManager.stopAllTunnels()
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.red)
+                        .liquidGlassButton(tint: .red, isProminent: true)
                         .controlSize(.mini)
                         .help(L("安全熔断：立即切断所有 Cloudflare 公网穿透映射", "Emergency kill switch: disconnect all Cloudflare tunnels"))
                     }
@@ -117,7 +116,7 @@ struct MainWindow: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 7)
-            .background(.ultraThinMaterial)
+            .liquidGlassBar()
 
             Divider()
 
@@ -302,12 +301,14 @@ struct MainWindow: View {
                 .frame(width: 130)
             }
 
-            ToolbarItemGroup(placement: .primaryAction) {
+            ToolbarItem(placement: .automatic) {
                 Button(action: { Task { await supervisor.probeAllServices() } }) {
                     Label(L("全部检测", "Probe All"), systemImage: "arrow.triangle.2.circlepath")
                 }
                 .help(L("重新检测所有服务状态与运行时长", "Re-probe status and uptime of all services"))
+            }
 
+            ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: { showAddSheet = true }) {
                     Label(L("添加服务", "Add Service"), systemImage: "plus")
                 }

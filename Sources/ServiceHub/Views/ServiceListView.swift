@@ -138,15 +138,13 @@ struct ServiceListView: View {
                             Button(L("停止", "Stop")) {
                                 serviceToStop = s
                             }
-                            .buttonStyle(.bordered)
-                            .tint(.red)
+                            .liquidGlassButton(tint: .red)
                             .controlSize(.small)
 
                             Button(action: { serviceToRestart = s }) {
                                 Text(L("重启", "Restart"))
                             }
-                            .buttonStyle(.bordered)
-                            .tint(.blue)
+                            .liquidGlassButton(tint: .blue)
                             .controlSize(.small)
                             .help(L("重启服务", "Restart service"))
                         }
@@ -154,8 +152,7 @@ struct ServiceListView: View {
                         Button(L("启动", "Start")) {
                             Task { await supervisor.startService(s) }
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.green)
+                        .liquidGlassButton(tint: .green)
                         .controlSize(.small)
                     }
 
@@ -165,8 +162,7 @@ struct ServiceListView: View {
                         Button(action: { NSWorkspace.shared.open(url) }) {
                             Image(systemName: "safari")
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.blue)
+                        .liquidGlassButton(tint: .blue)
                         .controlSize(.small)
                         .help(L("打开主页: \(webStr)", "Open homepage: \(webStr)"))
                     }
@@ -180,8 +176,7 @@ struct ServiceListView: View {
                                 Text(L("断开", "Disconnect"))
                             }
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.purple)
+                        .liquidGlassButton(tint: .purple)
                         .controlSize(.small)
                         .help(L("已暴露至公网，点击切断", "Exposed to public; click to disconnect"))
                     } else {
@@ -191,8 +186,7 @@ struct ServiceListView: View {
                                 Text(L("公网", "Public"))
                             }
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.purple)
+                        .liquidGlassButton(tint: .purple)
                         .controlSize(.small)
                         .help(L("通过 Cloudflare Tunnel 一键穿透映射到公网", "Expose via Cloudflare Tunnel"))
                     }

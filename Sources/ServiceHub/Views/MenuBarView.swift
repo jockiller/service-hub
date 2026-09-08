@@ -112,29 +112,26 @@ struct MenuBarView: View {
                                     Button(L("关闭", "Stop")) {
                                         Task { await supervisor.stopService(s) }
                                     }
-                                    .buttonStyle(.bordered)
-                                    .tint(.red)
+                                    .liquidGlassButton(tint: .red)
                                     .controlSize(.small)
 
                                     Button(L("重启", "Restart")) {
                                         Task { await supervisor.restartService(s) }
                                     }
-                                    .buttonStyle(.bordered)
-                                    .tint(.blue)
+                                    .liquidGlassButton(tint: .blue)
                                     .controlSize(.small)
                                 }
                             } else {
                                 Button(L("启动", "Start")) {
                                     Task { await supervisor.startService(s) }
                                 }
-                                .buttonStyle(.bordered)
-                                .tint(.green)
+                                .liquidGlassButton(tint: .green)
                                 .controlSize(.small)
                             }
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
-                        .background(Color(NSColor.controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                        .liquidGlassCard(cornerRadius: 8)
                     }
                 }
                 .padding(12)

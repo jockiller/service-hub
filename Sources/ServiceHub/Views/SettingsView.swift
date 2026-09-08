@@ -37,7 +37,7 @@ struct SettingsView: View {
                 Spacer()
             }
             .padding(16)
-            .background(Color(NSColor.controlBackgroundColor))
+            .liquidGlassBar()
 
             Divider()
 
@@ -130,13 +130,13 @@ struct SettingsView: View {
                             .textSelection(.enabled)
                             .padding(6)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color(NSColor.textBackgroundColor))
-                            .cornerRadius(5)
+                            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
 
                         HStack(spacing: 8) {
                             Button(L("更改路径...", "Change Path...")) {
                                 chooseCustomPath()
                             }
+                            .liquidGlassButton()
                             .controlSize(.small)
 
                             if !settings.customConfigPath.isEmpty {
@@ -145,6 +145,7 @@ struct SettingsView: View {
                                     alertMessage = L("已恢复至默认存储路径", "Restored to the default storage path")
                                     showAlert = true
                                 }
+                                .liquidGlassButton()
                                 .controlSize(.small)
                             }
 
@@ -153,6 +154,7 @@ struct SettingsView: View {
                             Button(L("在访达中显示", "Reveal in Finder")) {
                                 NSWorkspace.shared.activateFileViewerSelecting([store.configURL])
                             }
+                            .liquidGlassButton()
                             .controlSize(.small)
                         }
                     }
@@ -171,6 +173,7 @@ struct SettingsView: View {
                 Button(L("完成", "Done")) {
                     dismiss()
                 }
+                .liquidGlassButton(isProminent: true)
                 .keyboardShortcut(.defaultAction)
             }
             .padding(12)

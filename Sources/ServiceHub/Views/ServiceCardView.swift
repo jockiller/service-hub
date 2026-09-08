@@ -174,8 +174,7 @@ struct ServiceCardView: View {
                                 .font(.system(size: 11))
                         }
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.red)
+                    .liquidGlassButton(tint: .red)
                     .controlSize(.small)
                     .disabled(isBusy)
 
@@ -183,8 +182,7 @@ struct ServiceCardView: View {
                         Text(L("重启", "Restart"))
                             .font(.system(size: 11))
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.blue)
+                    .liquidGlassButton(tint: .blue)
                     .controlSize(.small)
                     .disabled(isBusy)
                     .help(L("重启服务", "Restart service"))
@@ -197,8 +195,7 @@ struct ServiceCardView: View {
                                 .font(.system(size: 11))
                         }
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.green)
+                    .liquidGlassButton(tint: .green)
                     .controlSize(.small)
                     .disabled(isBusy)
                 }
@@ -210,8 +207,7 @@ struct ServiceCardView: View {
                         Image(systemName: "safari")
                             .font(.system(size: 11))
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.blue)
+                    .liquidGlassButton(tint: .blue)
                     .controlSize(.small)
                     .help(L("打开服务主页: \(webStr)", "Open homepage: \(webStr)"))
                 }
@@ -228,8 +224,7 @@ struct ServiceCardView: View {
                                 .font(.system(size: 10))
                         }
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.purple)
+                    .liquidGlassButton(tint: .purple)
                     .controlSize(.small)
                     .help(isTunneled ? L("点击断开当前公网映射", "Click to disconnect the public tunnel") : L("通过 Cloudflare 隧道一键将本地服务映射到公网", "Expose this service via a Cloudflare Tunnel"))
                 }
@@ -269,13 +264,13 @@ struct ServiceCardView: View {
             }
         }
         .padding(12)
-        // 苹果官方原生超薄材质容器与自适应边框
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+        // 苹果官方原生 Liquid Glass 动态材质卡片
+        .liquidGlassCard(cornerRadius: 12)
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 12)
                 .stroke(isSelected ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: isSelected ? 2 : 1)
         )
-        .contentShape(RoundedRectangle(cornerRadius: 10))
+        .contentShape(RoundedRectangle(cornerRadius: 12))
         .onTapGesture {
             onSelect()
         }

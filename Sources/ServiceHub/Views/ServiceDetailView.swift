@@ -68,30 +68,26 @@ struct ServiceDetailView: View {
                         Button(action: { showStopConfirm = true }) {
                             Label(L("停止", "Stop"), systemImage: "stop.fill")
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
+                        .liquidGlassButton(tint: .red)
                         .disabled(isBusy)
 
                         Button(action: { showRestartConfirm = true }) {
                             Label(L("重启", "Restart"), systemImage: "arrow.clockwise")
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.blue)
+                        .liquidGlassButton(tint: .blue)
                         .disabled(isBusy)
                     } else {
                         Button(action: { Task { await supervisor.startService(service) } }) {
                             Label(L("启动", "Start"), systemImage: "play.fill")
                         }
-                        .buttonStyle(.bordered)
-                        .tint(.green)
+                        .liquidGlassButton(tint: .green)
                         .disabled(isBusy)
                     }
 
                     Button(action: { Task { await supervisor.refreshService(service) } }) {
                         Image(systemName: "arrow.triangle.2.circlepath")
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.secondary)
+                    .liquidGlassButton(tint: .secondary)
                     .disabled(isBusy)
                     .help(L("刷新状态", "Refresh status"))
 
