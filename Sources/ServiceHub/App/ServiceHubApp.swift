@@ -31,8 +31,7 @@ struct ServiceHubApp: App {
         let bundleURL = Bundle.main.bundleURL
         let candidates: [URL?] = [
             Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
-            bundleURL.appendingPathComponent("Contents/Resources/AppIcon.icns"),
-            URL(fileURLWithPath: "/Users/jockiller/Documents/workspace/git_work/my/servicehub/Resources/AppIcon.icns")
+            bundleURL.appendingPathComponent("Contents/Resources/AppIcon.icns")
         ]
         for url in candidates {
             if let u = url, let img = NSImage(contentsOf: u) {
@@ -111,8 +110,7 @@ struct ServiceHubApp: App {
         let bundleURL = Bundle.main.bundleURL
         let candidates: [URL?] = [
             Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
-            bundleURL.appendingPathComponent("Contents/Resources/MenuBarIcon.png"),
-            URL(fileURLWithPath: "/Users/jockiller/Documents/workspace/git_work/my/servicehub/Resources/MenuBarIcon.png")
+            bundleURL.appendingPathComponent("Contents/Resources/MenuBarIcon.png")
         ]
         for url in candidates {
             if let u = url, let img = NSImage(contentsOf: u) {

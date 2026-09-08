@@ -4,7 +4,7 @@ set -e
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$DIR"
 
-VERSION="${1:-1.6.4}"
+VERSION="${1:-1.7.0}"
 
 echo "==> 正在编译 ServiceHub (Release 优化模式)..."
 swift build -c release

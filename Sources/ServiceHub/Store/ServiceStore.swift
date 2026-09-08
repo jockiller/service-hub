@@ -132,16 +132,17 @@ public final class ServiceStore: ObservableObject {
     }
 
     private func defaultServices() -> [Service] {
+        // 首次启动时的示例预设（仅作演示，请按需编辑为自己的服务）
         return [
             Service(
                 id: "gpt-load",
                 name: "GPT-Load",
                 icon: "bolt.fill",
-                autoStart: true,
-                startCommand: "/Users/jockiller/Documents/workspace/git_work/my/py3/ai/gpt_load/gpt_load start",
-                stopCommand: "/Users/jockiller/Documents/workspace/git_work/my/py3/ai/gpt_load/gpt_load stop",
-                statusCommand: "/Users/jockiller/Documents/workspace/git_work/my/py3/ai/gpt_load/gpt_load status",
-                logPath: "/Users/jockiller/env/gpt_load/gpt-load.log",
+                autoStart: false,
+                startCommand: "/path/to/gpt_load start",
+                stopCommand: "/path/to/gpt_load stop",
+                statusCommand: "pgrep -f gpt_load >/dev/null",
+                logPath: "",
                 healthCheckURL: "http://127.0.0.1:3001/health",
                 webURL: "http://127.0.0.1:3001"
             ),
@@ -149,20 +150,11 @@ public final class ServiceStore: ObservableObject {
                 id: "frpc",
                 name: "FRP Client",
                 icon: "network",
-                autoStart: true,
-                startCommand: "/Users/jockiller/Documents/workspace/git_work/my/py3/other/frp/frpc start",
-                stopCommand: "/Users/jockiller/Documents/workspace/git_work/my/py3/other/frp/frpc stop",
-                statusCommand: "/Users/jockiller/Documents/workspace/git_work/my/py3/other/frp/frpc status",
-                logPath: "/Users/jockiller/env/frp/frpc.log"
-            ),
-            Service(
-                id: "redis",
-                name: "Redis (Homebrew)",
-                icon: "cylinder.split.1x2.fill",
                 autoStart: false,
-                startCommand: "/opt/homebrew/bin/brew services start redis",
-                stopCommand: "/opt/homebrew/bin/brew services stop redis",
-                statusCommand: "/opt/homebrew/bin/brew services list | grep redis | grep started"
+                startCommand: "/usr/local/bin/frpc start",
+                stopCommand: "/usr/local/bin/frpc stop",
+                statusCommand: "pgrep -f frpc >/dev/null",
+                logPath: ""
             )
         ]
     }
