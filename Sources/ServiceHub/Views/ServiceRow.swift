@@ -12,7 +12,15 @@ struct ServiceRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(service.name)
                     .font(.system(size: 13, weight: .medium))
-                HStack(spacing: 4) {
+
+                HStack(spacing: 5) {
+                    Text(service.category.shortName)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(service.category.color)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(service.category.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
+
                     Circle()
                         .fill(currentStatus.color)
                         .frame(width: 7, height: 7)

@@ -25,10 +25,20 @@ struct ServiceCardView: View {
                     Text(service.name)
                         .font(.system(size: 14, weight: .bold))
                         .lineLimit(1)
-                    Text(service.id)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+
+                    HStack(spacing: 5) {
+                        Text(service.category.shortName)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(service.category.color)
+                            .padding(.horizontal, 4.5)
+                            .padding(.vertical, 1)
+                            .background(service.category.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3.5))
+
+                        Text(service.id)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer()

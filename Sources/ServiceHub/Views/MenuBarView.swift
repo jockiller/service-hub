@@ -64,6 +64,13 @@ struct MenuBarView: View {
                                     .lineLimit(1)
 
                                 HStack(spacing: 6) {
+                                    Text(s.category.shortName)
+                                        .font(.system(size: 9, weight: .semibold))
+                                        .foregroundColor(s.category.color)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 1)
+                                        .background(s.category.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
+
                                     HStack(spacing: 4) {
                                         Circle()
                                             .fill(st.color)

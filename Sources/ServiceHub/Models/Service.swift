@@ -51,6 +51,49 @@ public enum ServiceStatus: String, Codable, CaseIterable, Sendable {
     }
 }
 
+public enum ServiceCategory: String, Codable, CaseIterable, Sendable {
+    case script = "script"        // 自定义脚本
+    case homebrew = "homebrew"    // Homebrew
+    case docker = "docker"        // Docker
+    case application = "app"      // 应用程序
+
+    public var displayName: String {
+        switch self {
+        case .script: return L("自定义脚本", "Custom Script")
+        case .homebrew: return "Homebrew"
+        case .docker: return "Docker"
+        case .application: return L("应用程序", "Application")
+        }
+    }
+
+    public var shortName: String {
+        switch self {
+        case .script: return L("脚本", "Script")
+        case .homebrew: return "Brew"
+        case .docker: return "Docker"
+        case .application: return L("应用", "App")
+        }
+    }
+
+    public var color: Color {
+        switch self {
+        case .script: return .blue
+        case .homebrew: return .orange
+        case .docker: return .teal
+        case .application: return .purple
+        }
+    }
+
+    public var systemIcon: String {
+        switch self {
+        case .script: return "terminal"
+        case .homebrew: return "mug"
+        case .docker: return "shippingbox.fill"
+        case .application: return "app.fill"
+        }
+    }
+}
+
 public enum PreconditionType: String, Codable, CaseIterable, Sendable {
     case none = "none"
 
@@ -232,6 +275,29 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var webURL: String?
     public var openWebURLOnStart: Bool
     public var tunnelConfig: TunnelConfig?
+    /// 服务所属类别（自定义脚本 / Homebrew / Docker / 应用程序）
+    public var serviceType: ServiceCategory?
+
+    /// 智能解析服务所属的类别（优先使用显式 serviceType，若历史配置未存则根据命令及路径自动识别）
+    public var category: ServiceCategory {
+        if let type = serviceType {
+            return type
+        }
+        if let app = appPath, !app.trimmingCharacters(in: .whitespaces).isEmpty {
+            return .application
+        }
+        let fullCmd = (startCommand + " " + (statusCommand ?? "") + " " + (stopCommand ?? "")).lowercased()
+        if fullCmd.contains("brew services") {
+            return .homebrew
+        }
+        if fullCmd.contains("docker ") || fullCmd.contains("docker-compose") {
+            return .docker
+        }
+        if startCommand.hasPrefix("open -a ") || startCommand.hasPrefix("open -b ") {
+            return .application
+        }
+        return .script
+    }
 
     public init(
         id: String,
@@ -252,7 +318,8 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         healthCheckRestartThreshold: Int? = nil,
         webURL: String? = nil,
         openWebURLOnStart: Bool = false,
-        tunnelConfig: TunnelConfig? = nil
+        tunnelConfig: TunnelConfig? = nil,
+        serviceType: ServiceCategory? = nil
     ) {
         self.id = id
         self.name = name
@@ -273,6 +340,7 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.webURL = webURL
         self.openWebURLOnStart = openWebURLOnStart
         self.tunnelConfig = tunnelConfig
+        self.serviceType = serviceType
     }
 
     public init(from decoder: Decoder) throws {
@@ -296,6 +364,7 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.webURL = try container.decodeIfPresent(String.self, forKey: .webURL)
         self.openWebURLOnStart = try container.decodeIfPresent(Bool.self, forKey: .openWebURLOnStart) ?? false
         self.tunnelConfig = try container.decodeIfPresent(TunnelConfig.self, forKey: .tunnelConfig)
+        self.serviceType = try container.decodeIfPresent(ServiceCategory.self, forKey: .serviceType)
     }
 }
 

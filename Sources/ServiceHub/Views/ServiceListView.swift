@@ -27,11 +27,23 @@ struct ServiceListView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(s.name)
                             .font(.system(size: 13, weight: .semibold))
-                        Text(s.id)
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+
+                        HStack(spacing: 5) {
+                            Text(s.category.shortName)
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(s.category.color)
+                                .padding(.horizontal, 4.5)
+                                .padding(.vertical, 1)
+                                .background(s.category.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3.5))
+
+                            Text(s.id)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
                     }
-                    .frame(minWidth: 140, alignment: .leading)
+                    .frame(minWidth: 150, alignment: .leading)
 
                     // 状态 Badge
                     let st = supervisor.statuses[s.id] ?? .unknown

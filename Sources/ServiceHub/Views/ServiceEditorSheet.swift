@@ -589,7 +589,7 @@ struct ServiceEditorSheet: View {
     private func applyBrewItem(_ item: BrewServiceItem) {
         let trimmed = item.name
         id = trimmed
-        name = "\(trimmed.capitalized) (Homebrew)"
+        name = trimmed.capitalized
         icon = item.recommendedIcon
         startCommand = "/opt/homebrew/bin/brew services start \(trimmed)"
         stopCommand = "/opt/homebrew/bin/brew services stop \(trimmed)"
@@ -613,7 +613,7 @@ struct ServiceEditorSheet: View {
     private func applyDockerItem(_ item: DockerContainerItem) {
         let trimmed = item.name.replacingOccurrences(of: "/", with: "")
         id = trimmed
-        name = "\(trimmed.capitalized) (Docker)"
+        name = trimmed.capitalized
         icon = "shippingbox.fill"
         let dockerPath = DockerScanner.findDockerPath()
         startCommand = "\(dockerPath) start \(trimmed)"
@@ -656,6 +656,18 @@ struct ServiceEditorSheet: View {
             )
         }
 
+        let resolvedCategory: ServiceCategory
+        if let existing = serviceToEdit?.serviceType {
+            resolvedCategory = existing
+        } else {
+            switch selectedTemplate {
+            case 1: resolvedCategory = .homebrew
+            case 2: resolvedCategory = .application
+            case 3: resolvedCategory = .docker
+            default: resolvedCategory = .script
+            }
+        }
+
         let service = Service(
             id: id.trimmingCharacters(in: .whitespacesAndNewlines),
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -675,7 +687,8 @@ struct ServiceEditorSheet: View {
             healthCheckRestartThreshold: (healthCheckRestartEnabled && !healthCheckURL.trimmingCharacters(in: .whitespaces).isEmpty) ? healthCheckRestartThreshold : nil,
             webURL: webURL.isEmpty ? nil : webURL.trimmingCharacters(in: .whitespacesAndNewlines),
             openWebURLOnStart: openWebURLOnStart,
-            tunnelConfig: tc
+            tunnelConfig: tc,
+            serviceType: resolvedCategory
         )
         onSave(service)
         dismiss()
