@@ -41,6 +41,11 @@ struct ServiceHubApp: App {
         // 主程序窗口
         WindowGroup("ServiceHub", id: "main") {
             MainWindow()
+                .task {
+                    // 应用启动后延迟拉起勾选了「随 ServiceHub 启动」的服务
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    Supervisor.shared.launchServicesAtStartup()
+                }
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)

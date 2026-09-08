@@ -215,6 +215,8 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var icon: String
     public var appPath: String?
     public var autoStart: Bool
+    /// 随 ServiceHub 应用启动而自动拉起该服务（与 autoStart 守护互相独立）
+    public var launchOnAppStart: Bool
     public var maxRestarts: Int
     public var restartWindowSeconds: Int
     public var precondition: PreconditionType
@@ -224,6 +226,9 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var statusCommand: String?
     public var logPath: String?
     public var healthCheckURL: String?
+    /// 健康检查失败 N 次后强制重启（即使 statusCommand 仍判活）
+    /// nil 或 0 = 关闭该功能；需要配置了 healthCheckURL 才生效
+    public var healthCheckRestartThreshold: Int?
     public var webURL: String?
     public var openWebURLOnStart: Bool
     public var tunnelConfig: TunnelConfig?
@@ -234,6 +239,7 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         icon: String = "gearshape",
         appPath: String? = nil,
         autoStart: Bool = true,
+        launchOnAppStart: Bool = true,
         maxRestarts: Int = 3,
         restartWindowSeconds: Int = 60,
         precondition: PreconditionType = .none,
@@ -243,6 +249,7 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         statusCommand: String? = nil,
         logPath: String? = nil,
         healthCheckURL: String? = nil,
+        healthCheckRestartThreshold: Int? = nil,
         webURL: String? = nil,
         openWebURLOnStart: Bool = false,
         tunnelConfig: TunnelConfig? = nil
@@ -252,6 +259,7 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.icon = icon
         self.appPath = appPath
         self.autoStart = autoStart
+        self.launchOnAppStart = launchOnAppStart
         self.maxRestarts = maxRestarts
         self.restartWindowSeconds = restartWindowSeconds
         self.precondition = precondition
@@ -261,6 +269,7 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.statusCommand = statusCommand
         self.logPath = logPath
         self.healthCheckURL = healthCheckURL
+        self.healthCheckRestartThreshold = healthCheckRestartThreshold
         self.webURL = webURL
         self.openWebURLOnStart = openWebURLOnStart
         self.tunnelConfig = tunnelConfig
@@ -273,6 +282,7 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.icon = try container.decodeIfPresent(String.self, forKey: .icon) ?? "gearshape"
         self.appPath = try container.decodeIfPresent(String.self, forKey: .appPath)
         self.autoStart = try container.decodeIfPresent(Bool.self, forKey: .autoStart) ?? true
+        self.launchOnAppStart = try container.decodeIfPresent(Bool.self, forKey: .launchOnAppStart) ?? true
         self.maxRestarts = try container.decodeIfPresent(Int.self, forKey: .maxRestarts) ?? 3
         self.restartWindowSeconds = try container.decodeIfPresent(Int.self, forKey: .restartWindowSeconds) ?? 60
         self.precondition = try container.decodeIfPresent(PreconditionType.self, forKey: .precondition) ?? .none
@@ -282,6 +292,7 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.statusCommand = try container.decodeIfPresent(String.self, forKey: .statusCommand)
         self.logPath = try container.decodeIfPresent(String.self, forKey: .logPath)
         self.healthCheckURL = try container.decodeIfPresent(String.self, forKey: .healthCheckURL)
+        self.healthCheckRestartThreshold = try container.decodeIfPresent(Int.self, forKey: .healthCheckRestartThreshold)
         self.webURL = try container.decodeIfPresent(String.self, forKey: .webURL)
         self.openWebURLOnStart = try container.decodeIfPresent(Bool.self, forKey: .openWebURLOnStart) ?? false
         self.tunnelConfig = try container.decodeIfPresent(TunnelConfig.self, forKey: .tunnelConfig)

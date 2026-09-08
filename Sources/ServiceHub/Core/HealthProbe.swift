@@ -6,17 +6,22 @@ public struct ProbeResult: Sendable {
     public let pid: pid_t?
     public let launchDate: Date?
     public let uptimeString: String?
+    /// 配置了 healthCheckURL 但本次 HTTP 探活失败（进程可能仍在运行，由 statusCommand 兜底判定）
+    /// 用于「健康检查失败 N 次后强制重启」功能
+    public let httpHealthCheckFailed: Bool
 
     public init(
         status: ServiceStatus,
         pid: pid_t? = nil,
         launchDate: Date? = nil,
-        uptimeString: String? = nil
+        uptimeString: String? = nil,
+        httpHealthCheckFailed: Bool = false
     ) {
         self.status = status
         self.pid = pid
         self.launchDate = launchDate
         self.uptimeString = uptimeString
+        self.httpHealthCheckFailed = httpHealthCheckFailed
     }
 }
 
@@ -50,9 +55,29 @@ public final class HealthProbe {
                     uptimeString: pidInfo.uptime
                 )
             }
+            // HTTP 探活失败：继续用 statusCommand 兜底判定进程是否还在，但记录失败标记
+            if let cmd = service.statusCommand, !cmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let res = await ProcessRunner.run(command: cmd, timeout: 5)
+                if res.isSuccess {
+                    let pidInfo = await findPidForService(service: service, commandOutput: res.output)
+                    return ProbeResult(
+                        status: .running,
+                        pid: pidInfo.pid,
+                        launchDate: pidInfo.launchDate,
+                        uptimeString: pidInfo.uptime,
+                        httpHealthCheckFailed: true
+                    )
+                } else {
+                    // statusCommand 也失败：进程确实不在了
+                    return ProbeResult(status: .stopped, httpHealthCheckFailed: true)
+                }
+            }
+            // 没有配置 statusCommand：无法证实进程已死，保持 .unknown（不判死、不触发崩溃守护），
+            // 由 Supervisor 的健康失败计数器按 N 次阈值处理
+            return ProbeResult(status: .unknown, httpHealthCheckFailed: true)
         }
 
-        // 3. 若配置了 status 状态命令，执行命令检测
+        // 3. 若配置了 status 状态命令，执行命令检测（未配置 HTTP 探活时）
         if let cmd = service.statusCommand, !cmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let res = await ProcessRunner.run(command: cmd, timeout: 5)
             if res.isSuccess {

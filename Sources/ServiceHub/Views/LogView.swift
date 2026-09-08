@@ -3,12 +3,21 @@ import SwiftUI
 @MainActor
 struct LogView: View {
     let service: Service
+    /// 可选头部内容（如控制台标题），与搜索行合并到同一行
+    var header: AnyView? = nil
     @StateObject private var logTail = LogTail()
 
     var body: some View {
         VStack(spacing: 0) {
-            // 工具栏
+            // 工具栏（标题与搜索合并为一行）
             HStack(spacing: 12) {
+                if let header {
+                    header
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.3))
+                        .frame(width: 1, height: 14)
+                }
+
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                 TextField(L("过滤日志关键词...", "Filter logs..."), text: $logTail.filterText)
@@ -26,7 +35,7 @@ struct LogView: View {
                 Spacer()
 
                 Toggle(isOn: $logTail.isFollowing) {
-                    Label(L("跟踪滚动", "Follow"), systemImage: "arrow.down.to.line")
+                    Text(L("跟踪滚动", "Follow"))
                         .font(.system(size: 11))
                 }
                 .toggleStyle(.checkbox)

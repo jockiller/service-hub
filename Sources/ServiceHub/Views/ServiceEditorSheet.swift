@@ -13,6 +13,7 @@ struct ServiceEditorSheet: View {
     @State private var icon: String = "gearshape"
     @State private var appPath: String = ""
     @State private var autoStart: Bool = true
+    @State private var launchOnAppStart: Bool = true
     @State private var maxRestarts: Int = 3
     @State private var restartWindowSeconds: Int = 60
     @State private var precondition: PreconditionType = .none
@@ -22,6 +23,8 @@ struct ServiceEditorSheet: View {
     @State private var statusCommand: String = ""
     @State private var logPath: String = ""
     @State private var healthCheckURL: String = ""
+    @State private var healthCheckRestartEnabled: Bool = false
+    @State private var healthCheckRestartThreshold: Int = 3
     @State private var webURL: String = ""
     @State private var openWebURLOnStart: Bool = false
     @State private var tunnelEnabled: Bool = false
@@ -220,6 +223,11 @@ struct ServiceEditorSheet: View {
                             Toggle(L("异常退出后自动重启", "Auto-restart on crash"), isOn: $autoStart)
                         }
 
+                        HStack {
+                            Text(L("随应用启动:", "Launch on app start:")).frame(width: 90, alignment: .trailing)
+                            Toggle(L("ServiceHub 启动时自动拉起该服务", "Start this service when ServiceHub launches"), isOn: $launchOnAppStart)
+                        }
+
                         if autoStart {
                             HStack(spacing: 6) {
                                 Text(L("熔断保护:", "Circuit breaker:")).frame(width: 90, alignment: .trailing)
@@ -336,6 +344,25 @@ struct ServiceEditorSheet: View {
                             Text(L("HTTP 探活:", "HTTP health check:")).frame(width: 90, alignment: .trailing)
                             TextField(L("选填，如 http://127.0.0.1:3001/health", "Optional, e.g. http://127.0.0.1:3001/health"), text: $healthCheckURL)
                                 .textFieldStyle(.roundedBorder)
+                        }
+
+                        if !healthCheckURL.trimmingCharacters(in: .whitespaces).isEmpty {
+                            HStack {
+                                Text(L("失败重启:", "Restart on failure:")).frame(width: 90, alignment: .trailing)
+                                Toggle(L("健康检查连续失败 N 次后强制重启 (即使进程仍在运行)", "Force restart after N consecutive health check failures (even if process is alive)"), isOn: $healthCheckRestartEnabled)
+                                    .font(.system(size: 11))
+                            }
+                            if healthCheckRestartEnabled {
+                                HStack(spacing: 6) {
+                                    Text(L("失败阈值:", "Failure threshold:")).frame(width: 90, alignment: .trailing)
+                                    Stepper(L("\(healthCheckRestartThreshold) 次", "\(healthCheckRestartThreshold) time(s)"), value: $healthCheckRestartThreshold, in: 2...30)
+                                        .frame(width: 100)
+                                    Text(L("每 6s 探测一次，连续失败达到该次数即重启", "Probed every 6s; restarts when consecutive failures reach this count"))
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                }
+                                .font(.system(size: 12))
+                            }
                         }
 
                         HStack {
@@ -468,6 +495,7 @@ struct ServiceEditorSheet: View {
                 icon = s.icon
                 appPath = s.appPath ?? ""
                 autoStart = s.autoStart
+                launchOnAppStart = s.launchOnAppStart
                 maxRestarts = s.maxRestarts
                 restartWindowSeconds = s.restartWindowSeconds
                 precondition = s.precondition
@@ -477,6 +505,13 @@ struct ServiceEditorSheet: View {
                 statusCommand = s.statusCommand ?? ""
                 logPath = s.logPath ?? ""
                 healthCheckURL = s.healthCheckURL ?? ""
+                if let t = s.healthCheckRestartThreshold, t > 0 {
+                    healthCheckRestartEnabled = true
+                    healthCheckRestartThreshold = t
+                } else {
+                    // 关闭状态保留已保存的阈值原值（仅首次编辑时用默认 3），避免静默改写用户配置
+                    healthCheckRestartEnabled = false
+                }
                 webURL = s.webURL ?? ""
                 openWebURLOnStart = s.openWebURLOnStart
                 if let tc = s.tunnelConfig {
@@ -590,6 +625,7 @@ struct ServiceEditorSheet: View {
             icon: icon,
             appPath: appPath.isEmpty ? nil : appPath.trimmingCharacters(in: .whitespacesAndNewlines),
             autoStart: autoStart,
+            launchOnAppStart: launchOnAppStart,
             maxRestarts: maxRestarts,
             restartWindowSeconds: restartWindowSeconds,
             precondition: precondition,
@@ -599,6 +635,7 @@ struct ServiceEditorSheet: View {
             statusCommand: statusCommand.isEmpty ? nil : statusCommand.trimmingCharacters(in: .whitespacesAndNewlines),
             logPath: logPath.isEmpty ? nil : logPath.trimmingCharacters(in: .whitespacesAndNewlines),
             healthCheckURL: healthCheckURL.isEmpty ? nil : healthCheckURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            healthCheckRestartThreshold: (healthCheckRestartEnabled && !healthCheckURL.trimmingCharacters(in: .whitespaces).isEmpty) ? healthCheckRestartThreshold : nil,
             webURL: webURL.isEmpty ? nil : webURL.trimmingCharacters(in: .whitespacesAndNewlines),
             openWebURLOnStart: openWebURLOnStart,
             tunnelConfig: tc

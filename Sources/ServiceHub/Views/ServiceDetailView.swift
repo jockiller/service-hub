@@ -39,8 +39,16 @@ struct ServiceDetailView: View {
                     }
 
                     HStack(spacing: 12) {
+                        if service.launchOnAppStart {
+                            Label(L("随应用启动", "Launch on app start"), systemImage: "play.circle")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
                         if service.autoStart {
                             Label(L("开机/启动自启守护", "Auto-start guard"), systemImage: "bolt.badge.automatic")
+                                .font(.caption).foregroundColor(.secondary)
+                        }
+                        if let threshold = service.healthCheckRestartThreshold, threshold > 0, service.healthCheckURL != nil {
+                            Label(L("健康失败\(threshold)次重启", "Restart after \(threshold) health failures"), systemImage: "heart.badge.clock")
                                 .font(.caption).foregroundColor(.secondary)
                         }
                         if let healthURL = service.healthCheckURL {

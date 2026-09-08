@@ -23,10 +23,16 @@ public final class Supervisor: ObservableObject {
     @Published public var lastOutputs: [String: String] = [:]
 
     private var probeTimer: Timer?
+    /// 应用启动拉起只执行一次（主窗口重复出现时不重复拉起）
+    private var hasLaunchedAtStartup = false
     /// 记录各服务在短时间内的自动重启尝试时间戳，用于滑动时间窗口熔断
     private var restartTimestamps: [String: [Date]] = [:]
     /// 记录各服务是否已被熔断暂停保活
     @Published public var isCircuitBroken: [String: Bool] = [:]
+    /// 健康检查(HTTP)连续失败计数（即使进程仍被判活），达到阈值后强制重启
+    @Published public var healthCheckFailCounts: [String: Int] = [:]
+    /// 正在执行健康检查强制重启的服务（防重入）
+    private var forceRestarting: Set<String> = []
 
     public init() {
         startProbeLoop()
@@ -120,6 +126,85 @@ public final class Supervisor: ObservableObject {
                 // 运行正常，恢复重试计数与熔断状态
                 restartTimestamps[service.id] = []
                 isCircuitBroken[service.id] = false
+
+                // 健康检查失败 N 次强制重启：进程仍在（statusCommand 判活）但 HTTP 探活连续失败
+                // 强制重启同样计入滑动窗口熔断，防止"进程活着但不健康"时无限重启循环
+                if let threshold = service.healthCheckRestartThreshold, threshold > 0,
+                   service.healthCheckURL != nil {
+                    if res.httpHealthCheckFailed {
+                        // 已被熔断：不再强制重启，等手动恢复
+                        if isCircuitBroken[service.id] == true {
+                            self.statuses[service.id] = .failed
+                            self.runtimes[service.id]?.status = .failed
+                            return
+                        }
+
+                        let count = (healthCheckFailCounts[service.id] ?? 0) + 1
+                        healthCheckFailCounts[service.id] = count
+                        if count >= threshold && !forceRestarting.contains(service.id) {
+                            // 检查熔断窗口：强制重启与崩溃重拉共用同一窗口
+                            let now = Date()
+                            let window = TimeInterval(service.restartWindowSeconds)
+                            var history = restartTimestamps[service.id, default: []].filter { now.timeIntervalSince($0) <= window }
+                            if history.count >= service.maxRestarts {
+                                isCircuitBroken[service.id] = true
+                                self.statuses[service.id] = .failed
+                                healthCheckFailCounts[service.id] = 0
+                                let failReason = L("健康检查强制重启已熔断: \(service.restartWindowSeconds)s内重启\(history.count)次仍不健康，已停自动重启", "Health-restart circuit broken: \(history.count) restarts within \(service.restartWindowSeconds)s still unhealthy; auto restart paused")
+                                self.runtimes[service.id] = ServiceRuntimeInfo(
+                                    status: .failed,
+                                    pid: nil,
+                                    uptime: failReason
+                                )
+                                lastOutputs[service.id] = L("服务在 \(service.restartWindowSeconds) 秒内因健康检查失败被强制重启 \(history.count) 次仍未恢复，已暂停自动重启保护系统。请排查原因后手动处理。", "Service was force-restarted \(history.count) time(s) within \(service.restartWindowSeconds)s due to health failures without recovery; auto restart paused. Investigate and handle manually.")
+                                print("[-] [Supervisor] 服务 \(service.name) \(failReason)")
+                                return
+                            }
+
+                            print("[Supervisor] 服务 \(service.name) 健康检查连续失败 \(count)/\(threshold) 次，进程虽在运行仍执行强制重启...")
+                            lastOutputs[service.id] = L("健康检查连续失败 \(count) 次 (阈值 \(threshold))，进程仍在运行但强制重启以恢复健康状态。", "Health check failed \(count) time(s) in a row (threshold \(threshold)); process still alive but forcing restart to restore health.")
+                            history.append(now)
+                            restartTimestamps[service.id] = history
+                            forceRestarting.insert(service.id)
+                            healthCheckFailCounts[service.id] = 0
+                            Task { [weak self] in
+                                await self?.restartService(service)
+                                self?.forceRestarting.remove(service.id)
+                            }
+                        } else {
+                            print("[Supervisor] 服务 \(service.name) 健康检查失败 \(count)/\(threshold) 次")
+                        }
+                    } else {
+                        // 探活恢复正常，清零计数
+                        if let c = healthCheckFailCounts[service.id], c != 0 {
+                            print("[Supervisor] 服务 \(service.name) 健康检查恢复正常，失败计数清零")
+                        }
+                        healthCheckFailCounts[service.id] = 0
+                    }
+                }
+            }
+        }
+    }
+
+    /// 应用启动时：拉起所有勾选「随 ServiceHub 启动」的服务（跳过未勾选的，保持手动管理）
+    /// 已在运行中的服务自动跳过，避免重复执行 start 命令
+    public func launchServicesAtStartup() {
+        guard !hasLaunchedAtStartup else { return }
+        hasLaunchedAtStartup = true
+        let services = ServiceStore.shared.services
+        let toLaunch = services.filter { $0.launchOnAppStart }
+        guard !toLaunch.isEmpty else { return }
+        Task { [weak self] in
+            for s in toLaunch {
+                // 先探测当前实际状态，已运行的不再重复启动
+                let probeRes = await HealthProbe.probe(service: s)
+                if probeRes.status == .running {
+                    print("[Supervisor] 服务 \(s.name) 已在运行，跳过启动拉起")
+                    self?.applyProbeResult(probeRes, for: s)
+                    continue
+                }
+                print("[Supervisor] 应用启动：自动拉起 \(s.name)")
+                await self?.startService(s)
             }
         }
     }
@@ -212,7 +297,12 @@ public final class Supervisor: ObservableObject {
     }
 
     /// 重启服务
+    /// 注意：未配置 stopCommand 时 stopService 会直接返回，此时重启只会再跑一次 startCommand，
+    /// 可能拉起重复进程 —— 调用方（如健康检查强制重启）应确保服务配置了停止命令
     public func restartService(_ service: Service) async {
+        if service.stopCommand?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+            print("[!] [Supervisor] 服务 \(service.name) 未配置停止命令，重启将直接执行启动命令，可能导致重复进程")
+        }
         await stopService(service)
         try? await Task.sleep(nanoseconds: 500_000_000)
         await startService(service)

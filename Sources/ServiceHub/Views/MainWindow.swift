@@ -185,42 +185,66 @@ struct MainWindow: View {
 
             // 下半部分：底部固定日志控制台
             VStack(spacing: 0) {
-                // 控制台顶栏
-                HStack(spacing: 10) {
-                    Button(action: { isLogCollapsed.toggle() }) {
-                        Image(systemName: isLogCollapsed ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(isLogCollapsed ? L("展开日志控制台", "Expand log console") : L("折叠日志控制台", "Collapse log console"))
+                if isLogCollapsed || activeSelectedService == nil {
+                    // 折叠态 / 无服务时的标题栏
+                    HStack(spacing: 10) {
+                        Button(action: { isLogCollapsed.toggle() }) {
+                            Image(systemName: isLogCollapsed ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help(isLogCollapsed ? L("展开日志控制台", "Expand log console") : L("折叠日志控制台", "Collapse log console"))
 
-                    if let selected = activeSelectedService {
-                        ServiceIconView(service: selected, size: 16)
-                        Text(selected.name)
-                            .font(.system(size: 12, weight: .medium))
-                        Text(L("日志控制台", "Log Console"))
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                    } else {
-                        Image(systemName: "terminal")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                        Text(L("日志控制台", "Log Console"))
-                            .font(.system(size: 12, weight: .medium))
-                    }
+                        if let selected = activeSelectedService {
+                            ServiceIconView(service: selected, size: 16)
+                            Text(selected.name)
+                                .font(.system(size: 12, weight: .medium))
+                            Text(L("日志控制台", "Log Console"))
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        } else {
+                            Image(systemName: "terminal")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                            Text(L("日志控制台", "Log Console"))
+                                .font(.system(size: 12, weight: .medium))
+                        }
 
-                    Spacer()
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color(NSColor.controlBackgroundColor))
+
+                    Divider()
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(NSColor.controlBackgroundColor))
 
                 if !isLogCollapsed {
-                    Divider()
                     if let selected = activeSelectedService {
-                        LogView(service: selected)
-                            .frame(height: 240)
+                        // 标题与搜索行合并：标题作为头部传入 LogView
+                        LogView(
+                            service: selected,
+                            header: AnyView(
+                                HStack(spacing: 10) {
+                                    Button(action: { isLogCollapsed.toggle() }) {
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help(L("折叠日志控制台", "Collapse log console"))
+
+                                    ServiceIconView(service: selected, size: 16)
+                                    Text(selected.name)
+                                        .font(.system(size: 12, weight: .medium))
+                                    Text(L("日志控制台", "Log Console"))
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                }
+                            )
+                        )
+                        .frame(height: 240)
                     } else {
                         VStack(spacing: 8) {
                             Text(L("点击上方任意服务卡片查看其实时日志", "Select a service above to view its live logs"))
@@ -330,8 +354,8 @@ struct MainWindow: View {
         case .running:
             list = list.filter { supervisor.statuses[$0.id] == .running }
         case .tunneled:
-            // 筛选条件：已映射到公网的服务
-            list = list.filter { tunnelManager.isTunnelActive(for: $0.id) || $0.tunnelConfig?.enabled == true }
+            // 筛选条件：当前实际存在公网映射隧道的服务（仅看运行状态，不含"已配置自动映射但未运行"的）
+            list = list.filter { tunnelManager.isTunnelActive(for: $0.id) }
         case .stopped:
             list = list.filter { supervisor.statuses[$0.id] != .running }
         }
@@ -353,7 +377,7 @@ struct MainWindow: View {
         case .running:
             return store.services.filter { supervisor.statuses[$0.id] == .running }.count
         case .tunneled:
-            return store.services.filter { tunnelManager.isTunnelActive(for: $0.id) || $0.tunnelConfig?.enabled == true }.count
+            return store.services.filter { tunnelManager.isTunnelActive(for: $0.id) }.count
         case .stopped:
             return store.services.filter { supervisor.statuses[$0.id] != .running }.count
         }
