@@ -77,10 +77,47 @@ In daily software development and local DevOps, developers often manage numerous
 - **Crash-Loop Backoff & Circuit Breaker**:
   - Automatically recovers and restarts failed auto-start services;
   - Configurable sliding time window and maximum consecutive failure count (e.g., stops auto-restart if failing 3 times within 60s) to protect CPU and system stability.
+- **Status Command Specification (Important)**:
+  - ServiceHub determines whether a service is alive by executing the "Status Command" and reading its **process exit code** — the command's stdout content is **never used for liveness detection**;
+  - **Exit code `0` = Running, non-zero = Stopped**. This is the only liveness criterion;
+  - ⚠️ **Warning**: Many shell scripts (especially those with `set -e` or internal `grep` calls) may return a non-zero exit code even when the service is healthy, or always `exit 0` regardless of the service state. Both situations distort ServiceHub's status detection (e.g., a crashed service may keep showing "Running", and the crash guardian will never trigger an auto-restart);
+  - ✅ **Recommended patterns**:
+    ```bash
+    # 1. Detect a process with pgrep (recommended)
+    pgrep -f "frpc" >/dev/null
+
+    # 2. Check whether a Homebrew service is started
+    brew services list | grep "^redis" | grep -q "started"
+
+    # 3. Check whether a Docker container is Running
+    docker inspect -f '{{.State.Running}}' my-container | grep -q "true"
+
+    # 4. Check whether a port is being listened on
+    lsof -i :8080 >/dev/null 2>&1
+    ```
+  - ❌ **Bad examples**: `echo "Service is running"` (always exits 0, misjudged as alive regardless of state), `tail -n 5 app.log` (exit code depends on the last log line's content, unrelated to the process state);
+  - 💡 **Debugging tip**: Run your status command manually in Terminal, then run `echo $?` to verify the exit code is `0` (running) / non-zero (stopped). Make sure the script always returns a **reliable, distinguishable exit code**;
+  - 📋 **Template for self-managed scripts**: If you write your own service management script (e.g. `xxx.sh start|stop|status`), make sure the `status` branch **explicitly sets exit codes**, for example:
+    ```bash
+    do_status() {
+        if is_running; then
+            log "Service: running (PID $(cat "${PID_FILE}"))"
+            exit 0          # ✅ Running must explicitly exit 0
+        else
+            log "Service: not running."
+            exit 1          # ✅ Stopped must explicitly exit non-zero
+        fi
+    }
+    ```
+    ⚠️ Watch out for two common pitfalls:
+    1. **Never rely on implicit return values at the end of a branch** — if the last line of `do_status` is `log "xxx"`, `networksetup ...`, or another external command, the function's exit code follows that command instead of the real service state. Always `exit 0` / `exit 1` explicitly in every branch;
+    2. **Beware of `set -e` interference** — with `set -Eeuo pipefail`, any intermediate command failure inside the script (e.g. `grep` missing a match, a missing file) aborts the whole script with a non-zero code, which may conflict with your status semantics. Add `|| true` after intermediate commands in the status path, or keep status-detection logic isolated from the global `set -e` scope.
 - **Real-Time Log Streamer**:
   - Lightweight file tail powered by AppKit `DispatchSource`;
-  - Live keyword filtering, search, and automatic scroll-to-bottom;
-  - One-click reveal log file in Finder.
+  - **Bounded line buffer**: the console keeps only the latest **300 lines** of live logs — memory stays constantly tiny no matter how large the log file grows, and the UI stays perfectly smooth;
+  - When the display cap is exceeded, a truncation notice appears at the top with a one-click "Open Full File" shortcut to view complete history in Finder;
+  - Live keyword filtering, ANSI-colored highlighting, and a **one-click Clear console** button (the on-disk log file is never touched);
+  - Automatic scroll-to-bottom and one-click reveal log file in Finder.
 - **Cloud Backup & Multi-Mac Sync (OneDrive / iCloud)**:
   - Human-readable YAML configuration format;
   - Customize config storage path in Settings (e.g. point to OneDrive or iCloud Drive) with automatic data migration.
