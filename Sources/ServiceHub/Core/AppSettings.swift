@@ -41,10 +41,25 @@ public final class AppSettings: ObservableObject {
     public func applyDockActivationPolicy() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+            WindowManager.shared.isChangingActivationPolicy = true
+
+            let visibleWindows = NSApp.windows.filter { $0.isVisible && !($0 is NSPanel) }
+
             if self.hideDockIcon {
                 NSApp.setActivationPolicy(.accessory)
             } else {
                 NSApp.setActivationPolicy(.regular)
+            }
+
+            // 保持当前所有已可见的主窗口与设置界面不因策略变更而瞬间消失
+            for win in visibleWindows {
+                win.makeKeyAndOrderFront(nil)
+                win.orderFrontRegardless()
+            }
+            NSApp.activate(ignoringOtherApps: true)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                WindowManager.shared.isChangingActivationPolicy = false
             }
         }
     }
