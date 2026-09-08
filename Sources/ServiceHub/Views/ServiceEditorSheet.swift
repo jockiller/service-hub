@@ -119,7 +119,7 @@ struct ServiceEditorSheet: View {
                                 .buttonStyle(.plain)
                             }
                             .padding(8)
-                            .liquidGlassCard(cornerRadius: 8)
+                            .liquidGlassCard(statusColor: .secondary, cornerRadius: 8)
                         }
 
                         // App 快速选择
@@ -135,7 +135,7 @@ struct ServiceEditorSheet: View {
                                 .controlSize(.small)
                             }
                             .padding(8)
-                            .liquidGlassCard(cornerRadius: 8)
+                            .liquidGlassCard(statusColor: .secondary, cornerRadius: 8)
                         }
 
                         // Docker 快速选择 —— 仅允许选择本机已存在的容器，不支持手填名称

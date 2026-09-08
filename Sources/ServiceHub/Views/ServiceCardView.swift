@@ -274,12 +274,8 @@ struct ServiceCardView: View {
             }
         }
         .padding(12)
-        // 苹果官方原生 Liquid Glass 动态材质卡片
-        .liquidGlassCard(cornerRadius: 12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isSelected ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: isSelected ? 2 : 1)
-        )
+        // 动态透光液态玻璃卡片容器
+        .liquidGlassCard(statusColor: currentStatus.color, isSelected: isSelected, cornerRadius: 12)
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .onTapGesture {
             onSelect()

@@ -138,7 +138,7 @@ struct MenuBarView: View {
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
-                        .liquidGlassCard(cornerRadius: 8)
+                        .liquidGlassCard(statusColor: st.color, cornerRadius: 8)
                     }
                 }
                 .padding(12)
