@@ -1,8 +1,18 @@
 import SwiftUI
 import AppKit
 
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            WindowManager.shared.openMainWindow()
+        }
+        return true
+    }
+}
+
 @main
 struct ServiceHubApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var store = ServiceStore.shared
     @StateObject private var supervisor = Supervisor.shared
     @StateObject private var settings = AppSettings.shared

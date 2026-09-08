@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor
 struct MenuBarView: View {
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject var store = ServiceStore.shared
     @ObservedObject var supervisor = Supervisor.shared
     @ObservedObject var localization = Localization.shared
@@ -166,11 +167,6 @@ struct MenuBarView: View {
     }
 
     private func openMainWindow() {
-        NSApp.activate(ignoringOtherApps: true)
-        for window in NSApp.windows {
-            if window.canBecomeMain {
-                window.makeKeyAndOrderFront(nil)
-            }
-        }
+        WindowManager.shared.openMainWindow(openWindowAction: openWindow)
     }
 }
