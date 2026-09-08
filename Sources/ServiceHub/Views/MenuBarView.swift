@@ -64,7 +64,7 @@ struct MenuBarView: View {
                                     .lineLimit(1)
 
                                 HStack(spacing: 6) {
-                                    HStack(spacing: 3) {
+                                    HStack(spacing: 4) {
                                         Circle()
                                             .fill(st.color)
                                             .frame(width: 6, height: 6)
@@ -113,28 +113,28 @@ struct MenuBarView: View {
                                         Task { await supervisor.stopService(s) }
                                     }
                                     .buttonStyle(.bordered)
+                                    .tint(.red)
                                     .controlSize(.small)
 
                                     Button(L("重启", "Restart")) {
                                         Task { await supervisor.restartService(s) }
                                     }
                                     .buttonStyle(.bordered)
+                                    .tint(.blue)
                                     .controlSize(.small)
                                 }
                             } else {
                                 Button(L("启动", "Start")) {
                                     Task { await supervisor.startService(s) }
                                 }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.bordered)
+                                .tint(.green)
                                 .controlSize(.small)
                             }
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color(NSColor.controlBackgroundColor))
-                        )
+                        .background(Color(NSColor.controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
                     }
                 }
                 .padding(12)

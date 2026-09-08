@@ -12,6 +12,9 @@ struct ServiceListView: View {
     @ObservedObject var tunnelManager = CloudflareTunnelManager.shared
     @ObservedObject var localization = Localization.shared
 
+    @State private var serviceToStop: Service? = nil
+    @State private var serviceToRestart: Service? = nil
+
     var body: some View {
         List(selection: Binding(
             get: { selectedId },
@@ -133,13 +136,17 @@ struct ServiceListView: View {
                     } else if st == .running {
                         HStack(spacing: 6) {
                             Button(L("停止", "Stop")) {
-                                Task { await supervisor.stopService(s) }
+                                serviceToStop = s
                             }
+                            .buttonStyle(.bordered)
+                            .tint(.red)
                             .controlSize(.small)
 
-                            Button(action: { Task { await supervisor.restartService(s) } }) {
+                            Button(action: { serviceToRestart = s }) {
                                 Text(L("重启", "Restart"))
                             }
+                            .buttonStyle(.bordered)
+                            .tint(.blue)
                             .controlSize(.small)
                             .help(L("重启服务", "Restart service"))
                         }
@@ -147,7 +154,8 @@ struct ServiceListView: View {
                         Button(L("启动", "Start")) {
                             Task { await supervisor.startService(s) }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.bordered)
+                        .tint(.green)
                         .controlSize(.small)
                     }
 
@@ -157,27 +165,37 @@ struct ServiceListView: View {
                         Button(action: { NSWorkspace.shared.open(url) }) {
                             Image(systemName: "safari")
                         }
+                        .buttonStyle(.bordered)
+                        .tint(.blue)
                         .controlSize(.small)
                         .help(L("打开主页: \(webStr)", "Open homepage: \(webStr)"))
                     }
 
                     // 公网穿透操作与状态
                     let isTunneled = tunnelManager.isTunnelActive(for: s.id)
-                    Button(action: {
-                        if isTunneled {
-                            tunnelManager.stopTunnel(for: s.id)
-                        } else {
-                            tunnelManager.startTunnel(for: s)
+                    if isTunneled {
+                        Button(action: { tunnelManager.stopTunnel(for: s.id) }) {
+                            HStack(spacing: 3) {
+                                Image(systemName: "globe.badge.chevron.backward")
+                                Text(L("断开", "Disconnect"))
+                            }
                         }
-                    }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: isTunneled ? "globe.badge.chevron.backward" : "globe")
-                            Text(isTunneled ? L("断开公网", "Disconnect") : L("公网穿透", "Public URL"))
+                        .buttonStyle(.bordered)
+                        .tint(.purple)
+                        .controlSize(.small)
+                        .help(L("已暴露至公网，点击切断", "Exposed to public; click to disconnect"))
+                    } else {
+                        Button(action: { tunnelManager.startTunnel(for: s) }) {
+                            HStack(spacing: 3) {
+                                Image(systemName: "globe")
+                                Text(L("公网", "Public"))
+                            }
                         }
+                        .buttonStyle(.bordered)
+                        .tint(.purple)
+                        .controlSize(.small)
+                        .help(L("通过 Cloudflare Tunnel 一键穿透映射到公网", "Expose via Cloudflare Tunnel"))
                     }
-                    .controlSize(.small)
-                    .foregroundColor(isTunneled ? .purple : .secondary)
-                    .help(isTunneled ? L("已暴露至公网，点击切断", "Exposed to public; click to disconnect") : L("通过 Cloudflare Tunnel 一键穿透映射到公网", "Expose via Cloudflare Tunnel"))
 
                     Menu {
                         if let webStr = s.webURL?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -206,5 +224,33 @@ struct ServiceListView: View {
             }
         }
         .listStyle(.inset)
+        .alert(L("确定关闭服务「\(serviceToStop?.name ?? "")」吗？", "Stop service \"\(serviceToStop?.name ?? "")\"?"), isPresented: Binding(
+            get: { serviceToStop != nil },
+            set: { if !$0 { serviceToStop = nil } }
+        )) {
+            Button(L("取消", "Cancel"), role: .cancel) { serviceToStop = nil }
+            Button(L("关闭服务", "Stop Service"), role: .destructive) {
+                if let s = serviceToStop {
+                    Task { await supervisor.stopService(s) }
+                }
+                serviceToStop = nil
+            }
+        } message: {
+            Text(L("关闭后该服务将停止运行，相关端口和本地/公网访问将被中断。", "The service process will be terminated and all active connections will be closed."))
+        }
+        .alert(L("确定重启服务「\(serviceToRestart?.name ?? "")」吗？", "Restart service \"\(serviceToRestart?.name ?? "")\"?"), isPresented: Binding(
+            get: { serviceToRestart != nil },
+            set: { if !$0 { serviceToRestart = nil } }
+        )) {
+            Button(L("取消", "Cancel"), role: .cancel) { serviceToRestart = nil }
+            Button(L("重启服务", "Restart")) {
+                if let s = serviceToRestart {
+                    Task { await supervisor.restartService(s) }
+                }
+                serviceToRestart = nil
+            }
+        } message: {
+            Text(L("重启期间服务将短暂中断，随后将自动重新启动。", "The service will be temporarily interrupted, then automatically restarted."))
+        }
     }
 }

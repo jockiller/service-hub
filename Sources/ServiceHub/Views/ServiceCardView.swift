@@ -12,6 +12,9 @@ struct ServiceCardView: View {
     @ObservedObject var tunnelManager = CloudflareTunnelManager.shared
     @ObservedObject var localization = Localization.shared
 
+    @State private var showStopConfirm = false
+    @State private var showRestartConfirm = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             // 头部：左侧[图标 + 大名称/小ID]  右侧[状态Badge]
@@ -37,7 +40,7 @@ struct ServiceCardView: View {
                     HStack(spacing: 4) {
                         Circle()
                             .fill(currentStatus.color)
-                            .frame(width: 6, height: 6)
+                            .frame(width: 7, height: 7)
                         Text(currentStatus.displayName)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(currentStatus.color)
@@ -146,38 +149,56 @@ struct ServiceCardView: View {
             .padding(.horizontal, 6)
             .frame(height: 22)
             .background(
-                tunnelManager.publicUrls[service.id] != nil
-                    ? RoundedRectangle(cornerRadius: 5).fill(Color.purple.opacity(0.08))
-                    : RoundedRectangle(cornerRadius: 5).fill(.clear)
+                Group {
+                    if tunnelManager.publicUrls[service.id] != nil {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.purple.opacity(0.12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(Color.purple.opacity(0.25), lineWidth: 0.5)
+                            )
+                    }
+                }
             )
 
             Divider()
 
             // 底部快捷操作按钮栏
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 if currentStatus == .running {
-                    Button(action: { Task { await supervisor.stopService(service) } }) {
-                        Label(L("关闭", "Stop"), systemImage: "stop.fill")
-                            .font(.system(size: 11))
+                    Button(action: { showStopConfirm = true }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 9))
+                            Text(L("关闭", "Stop"))
+                                .font(.system(size: 11))
+                        }
                     }
                     .buttonStyle(.bordered)
+                    .tint(.red)
                     .controlSize(.small)
                     .disabled(isBusy)
 
-                    Button(action: { Task { await supervisor.restartService(service) } }) {
+                    Button(action: { showRestartConfirm = true }) {
                         Text(L("重启", "Restart"))
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.bordered)
+                    .tint(.blue)
                     .controlSize(.small)
                     .disabled(isBusy)
                     .help(L("重启服务", "Restart service"))
                 } else {
                     Button(action: { Task { await supervisor.startService(service) } }) {
-                        Label(L("启动", "Start"), systemImage: "play.fill")
-                            .font(.system(size: 11))
+                        HStack(spacing: 3) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 9))
+                            Text(L("启动", "Start"))
+                                .font(.system(size: 11))
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
+                    .tint(.green)
                     .controlSize(.small)
                     .disabled(isBusy)
                 }
@@ -190,6 +211,7 @@ struct ServiceCardView: View {
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.bordered)
+                    .tint(.blue)
                     .controlSize(.small)
                     .help(L("打开服务主页: \(webStr)", "Open homepage: \(webStr)"))
                 }
@@ -202,13 +224,13 @@ struct ServiceCardView: View {
                         HStack(spacing: 3) {
                             Image(systemName: isTunneled ? "globe.badge.chevron.backward" : "globe")
                                 .font(.system(size: 10))
-                            Text(isTunneled ? L("断开公网", "Disconnect") : L("公网穿透", "Public URL"))
+                            Text(isTunneled ? L("断开", "Disconnect") : L("公网", "Public"))
                                 .font(.system(size: 10))
                         }
                     }
                     .buttonStyle(.bordered)
+                    .tint(.purple)
                     .controlSize(.small)
-                    .foregroundColor(isTunneled ? .purple : .secondary)
                     .help(isTunneled ? L("点击断开当前公网映射", "Click to disconnect the public tunnel") : L("通过 Cloudflare 隧道一键将本地服务映射到公网", "Expose this service via a Cloudflare Tunnel"))
                 }
 
@@ -246,19 +268,32 @@ struct ServiceCardView: View {
                 .frame(width: 20, height: 20)
             }
         }
-        .padding(11)
-        // 核心视觉：根据运行状态与未运行状态做鲜明高对比底色
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(cardBackgroundColor)
-        )
+        .padding(12)
+        // 苹果官方原生超薄材质容器与自适应边框
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(cardBorderColor, lineWidth: isSelected ? 2 : 1)
+                .stroke(isSelected ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: isSelected ? 2 : 1)
         )
-        .contentShape(Rectangle())
+        .contentShape(RoundedRectangle(cornerRadius: 10))
         .onTapGesture {
             onSelect()
+        }
+        .alert(L("确定关闭服务「\(service.name)」吗？", "Stop service \"\(service.name)\"?"), isPresented: $showStopConfirm) {
+            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(L("关闭服务", "Stop Service"), role: .destructive) {
+                Task { await supervisor.stopService(service) }
+            }
+        } message: {
+            Text(L("关闭后该服务将停止运行，相关端口和本地/公网访问将被中断。", "The service process will be terminated and all active connections will be closed."))
+        }
+        .alert(L("确定重启服务「\(service.name)」吗？", "Restart service \"\(service.name)\"?"), isPresented: $showRestartConfirm) {
+            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(L("重启服务", "Restart")) {
+                Task { await supervisor.restartService(service) }
+            }
+        } message: {
+            Text(L("重启期间服务将短暂不可用，随后将自动重新启动。", "The service will be temporarily interrupted, then automatically restarted."))
         }
     }
 

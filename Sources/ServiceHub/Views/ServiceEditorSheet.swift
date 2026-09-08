@@ -284,34 +284,61 @@ struct ServiceEditorSheet: View {
                         Text(L("控制命令", "Commands"))
                             .font(.caption.bold()).foregroundColor(.secondary)
 
-                        HStack {
+                        HStack(spacing: 8) {
                             Text(L("启动命令:", "Start command:")).frame(width: 90, alignment: .trailing)
                             TextField(L("如 /path/to/start.sh 或 open -a App", "e.g. /path/to/start.sh or open -a App"), text: $startCommand)
                                 .textFieldStyle(.roundedBorder)
-                            Button(L("浏览...", "Browse...")) {
+                            Button(action: {
                                 if let path = AppPickerHelper.pickFile(title: L("选择启动文件", "Choose Start File")) {
                                     startCommand = path
                                 }
+                            }) {
+                                Text(L("浏览...", "Browse..."))
+                                    .lineLimit(1)
+                                    .fixedSize()
                             }
                             .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .fixedSize()
+                            .layoutPriority(1)
                         }
 
-                        HStack {
+                        HStack(spacing: 8) {
                             Text(L("停止命令:", "Stop command:")).frame(width: 90, alignment: .trailing)
                             TextField(L("选填，如 /path/to/stop.sh", "Optional, e.g. /path/to/stop.sh"), text: $stopCommand)
                                 .textFieldStyle(.roundedBorder)
-                            Button(L("浏览...", "Browse...")) {
+                            Button(action: {
                                 if let path = AppPickerHelper.pickFile(title: L("选择停止脚本", "Choose Stop Script")) {
                                     stopCommand = path
                                 }
+                            }) {
+                                Text(L("浏览...", "Browse..."))
+                                    .lineLimit(1)
+                                    .fixedSize()
                             }
                             .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .fixedSize()
+                            .layoutPriority(1)
                         }
 
-                        HStack {
+                        HStack(spacing: 8) {
                             Text(L("状态命令:", "Status command:")).frame(width: 90, alignment: .trailing)
                             TextField(L("选填，退出码 0 视为运行中", "Optional; exit code 0 means running"), text: $statusCommand)
                                 .textFieldStyle(.roundedBorder)
+                            Button(action: {
+                                if let path = AppPickerHelper.pickFile(title: L("选择状态检测脚本", "Choose Status Script")) {
+                                    statusCommand = path
+                                }
+                            }) {
+                                Text(L("浏览...", "Browse..."))
+                                    .lineLimit(1)
+                                    .fixedSize()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .fixedSize()
+                            .layoutPriority(1)
                         }
                     }
 
@@ -330,7 +357,8 @@ struct ServiceEditorSheet: View {
                             if !webURL.trimmingCharacters(in: .whitespaces).isEmpty,
                                let url = URL(string: webURL) {
                                 Button(L("打开", "Open")) { NSWorkspace.shared.open(url) }
-                                    .buttonStyle(.bordered).controlSize(.small)
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
                             }
                         }
 
@@ -365,16 +393,23 @@ struct ServiceEditorSheet: View {
                             }
                         }
 
-                        HStack {
+                        HStack(spacing: 8) {
                             Text(L("日志路径:", "Log path:")).frame(width: 90, alignment: .trailing)
                             TextField(L("选填，日志文件绝对路径", "Optional, absolute path to log file"), text: $logPath)
                                 .textFieldStyle(.roundedBorder)
-                            Button(L("浏览...", "Browse...")) {
+                            Button(action: {
                                 if let path = AppPickerHelper.pickFile(title: L("选择日志文件", "Choose Log File")) {
                                     logPath = path
                                 }
+                            }) {
+                                Text(L("浏览...", "Browse..."))
+                                    .lineLimit(1)
+                                    .fixedSize()
                             }
                             .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .fixedSize()
+                            .layoutPriority(1)
                         }
                     }
 
@@ -426,7 +461,8 @@ struct ServiceEditorSheet: View {
                                             NSWorkspace.shared.open(u)
                                         }
                                     }
-                                    .buttonStyle(.bordered).controlSize(.small)
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
                                 }
                             }
 
@@ -451,6 +487,8 @@ struct ServiceEditorSheet: View {
                                     Label(L("测试运行启动命令", "Test Start Command"), systemImage: "play.circle")
                                 }
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                             .disabled(isTesting)
                             Spacer()
                         }
@@ -487,7 +525,7 @@ struct ServiceEditorSheet: View {
             }
             .padding(12)
         }
-        .frame(width: 520, height: 600)
+        .frame(width: 560, height: 600)
         .onAppear {
             if let s = serviceToEdit {
                 id = s.id

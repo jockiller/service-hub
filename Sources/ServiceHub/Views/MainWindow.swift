@@ -64,21 +64,28 @@ struct MainWindow: View {
                 ForEach(ServiceFilter.allCases, id: \.self) { f in
                     let count = countForFilter(f)
                     Button(action: { filter = f }) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 5) {
                             Text(f.title)
                             Text("\(count)")
                                 .font(.caption2.bold())
                                 .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(filter == f ? Color.accentColor : Color.secondary.opacity(0.15))
+                                .padding(.vertical, 1.5)
+                                .background(filter == f ? Color.accentColor : Color.secondary.opacity(0.14))
                                 .foregroundColor(filter == f ? .white : (f == .tunneled && count > 0 ? .orange : .secondary))
                                 .cornerRadius(8)
                         }
                         .font(.system(size: 11, weight: filter == f ? .semibold : .regular))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(filter == f ? Color.accentColor.opacity(0.12) : Color.clear)
-                        .cornerRadius(6)
+                        .background(
+                            Group {
+                                if filter == f {
+                                    RoundedRectangle(cornerRadius: 7)
+                                        .fill(Color.accentColor.opacity(0.15))
+                                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 0.5))
+                                }
+                            }
+                        )
                     }
                     .buttonStyle(.plain)
                 }
@@ -98,20 +105,19 @@ struct MainWindow: View {
                         Button(L("切断全部公网", "Disconnect All")) {
                             tunnelManager.stopAllTunnels()
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.red)
                         .controlSize(.mini)
-                        .foregroundColor(.red)
                         .help(L("安全熔断：立即切断所有 Cloudflare 公网穿透映射", "Emergency kill switch: disconnect all Cloudflare tunnels"))
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(Color.orange.opacity(0.12))
-                    .cornerRadius(6)
+                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 6)
-            .background(Color(NSColor.windowBackgroundColor))
+            .padding(.vertical, 7)
+            .background(.ultraThinMaterial)
 
             Divider()
 
@@ -129,6 +135,7 @@ struct MainWindow: View {
                             showAddSheet = true
                         }
                         .buttonStyle(.borderedProminent)
+                        .tint(.accentColor)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if filteredServices.isEmpty {
@@ -143,7 +150,7 @@ struct MainWindow: View {
                 } else {
                     if viewMode == .card {
                         ScrollView {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 250, maximum: 320), spacing: 14)], spacing: 14) {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 270, maximum: 340), spacing: 14)], spacing: 14) {
                                 ForEach(filteredServices) { s in
                                     ServiceCardView(
                                         service: s,
@@ -186,62 +193,87 @@ struct MainWindow: View {
             // 下半部分：底部固定日志控制台
             VStack(spacing: 0) {
                 if isLogCollapsed || activeSelectedService == nil {
-                    // 折叠态 / 无服务时的标题栏
+                    // 折叠态 / 无服务时的标题栏（整个标题栏区域可点击展开）
                     HStack(spacing: 10) {
-                        Button(action: { isLogCollapsed.toggle() }) {
-                            Image(systemName: isLogCollapsed ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.secondary)
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isLogCollapsed.toggle()
+                            }
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: isLogCollapsed ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.secondary)
+
+                                if let selected = activeSelectedService {
+                                    ServiceIconView(service: selected, size: 16)
+                                    Text(selected.name)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.primary)
+                                    Text(L("日志控制台", "Log Console"))
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Image(systemName: "terminal")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+                                    Text(L("日志控制台", "Log Console"))
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.primary)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                            .padding(.horizontal, 4)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .help(isLogCollapsed ? L("展开日志控制台", "Expand log console") : L("折叠日志控制台", "Collapse log console"))
-
-                        if let selected = activeSelectedService {
-                            ServiceIconView(service: selected, size: 16)
-                            Text(selected.name)
-                                .font(.system(size: 12, weight: .medium))
-                            Text(L("日志控制台", "Log Console"))
-                                .font(.system(size: 11))
-                                .foregroundColor(.secondary)
-                        } else {
-                            Image(systemName: "terminal")
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
-                            Text(L("日志控制台", "Log Console"))
-                                .font(.system(size: 12, weight: .medium))
-                        }
+                        .help(L("点击展开/折叠日志控制台", "Click to expand/collapse log console"))
 
                         Spacer()
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(Color(NSColor.controlBackgroundColor))
+                    .background(.thinMaterial)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isLogCollapsed.toggle()
+                        }
+                    }
 
                     Divider()
                 }
 
                 if !isLogCollapsed {
                     if let selected = activeSelectedService {
-                        // 标题与搜索行合并：标题作为头部传入 LogView
+                        // 标题与搜索行合并：标题作为头部传入 LogView，搜索框前面的整个 title 区域点击均可折叠/展开
                         LogView(
                             service: selected,
                             header: AnyView(
-                                HStack(spacing: 10) {
-                                    Button(action: { isLogCollapsed.toggle() }) {
+                                Button(action: {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        isLogCollapsed.toggle()
+                                    }
+                                }) {
+                                    HStack(spacing: 8) {
                                         Image(systemName: "chevron.down")
                                             .font(.system(size: 11, weight: .bold))
                                             .foregroundColor(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help(L("折叠日志控制台", "Collapse log console"))
 
-                                    ServiceIconView(service: selected, size: 16)
-                                    Text(selected.name)
-                                        .font(.system(size: 12, weight: .medium))
-                                    Text(L("日志控制台", "Log Console"))
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.secondary)
+                                        ServiceIconView(service: selected, size: 16)
+                                        Text(selected.name)
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(.primary)
+                                        Text(L("日志控制台", "Log Console"))
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(.vertical, 2)
+                                    .padding(.horizontal, 4)
+                                    .contentShape(Rectangle())
                                 }
+                                .buttonStyle(.plain)
+                                .help(L("点击折叠/展开日志控制台", "Click to collapse/expand log console"))
                             )
                         )
                         .frame(height: 240)

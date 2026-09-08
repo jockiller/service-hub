@@ -8,6 +8,8 @@ struct ServiceDetailView: View {
 
     @State private var showEditSheet = false
     @State private var showDeleteAlert = false
+    @State private var showStopConfirm = false
+    @State private var showRestartConfirm = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -63,22 +65,25 @@ struct ServiceDetailView: View {
                 // 操作按钮组
                 HStack(spacing: 8) {
                     if currentStatus == .running {
-                        Button(action: { Task { await supervisor.stopService(service) } }) {
+                        Button(action: { showStopConfirm = true }) {
                             Label(L("停止", "Stop"), systemImage: "stop.fill")
                         }
                         .buttonStyle(.bordered)
+                        .tint(.red)
                         .disabled(isBusy)
 
-                        Button(action: { Task { await supervisor.restartService(service) } }) {
+                        Button(action: { showRestartConfirm = true }) {
                             Label(L("重启", "Restart"), systemImage: "arrow.clockwise")
                         }
                         .buttonStyle(.bordered)
+                        .tint(.blue)
                         .disabled(isBusy)
                     } else {
                         Button(action: { Task { await supervisor.startService(service) } }) {
                             Label(L("启动", "Start"), systemImage: "play.fill")
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.bordered)
+                        .tint(.green)
                         .disabled(isBusy)
                     }
 
@@ -86,6 +91,7 @@ struct ServiceDetailView: View {
                         Image(systemName: "arrow.triangle.2.circlepath")
                     }
                     .buttonStyle(.bordered)
+                    .tint(.secondary)
                     .disabled(isBusy)
                     .help(L("刷新状态", "Refresh status"))
 
@@ -146,6 +152,22 @@ struct ServiceDetailView: View {
             }
         } message: {
             Text(L("删除后将不再对该服务进行状态监控与生命周期管理，但不会删除原脚本或服务本身。", "The service will no longer be monitored or managed. The original scripts or the service itself are not removed."))
+        }
+        .alert(L("确定关闭服务「\(service.name)」吗？", "Stop service \"\(service.name)\"?"), isPresented: $showStopConfirm) {
+            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(L("关闭服务", "Stop Service"), role: .destructive) {
+                Task { await supervisor.stopService(service) }
+            }
+        } message: {
+            Text(L("关闭后该服务将停止运行，相关端口和本地/公网访问将被中断。", "The service process will be terminated and all active connections will be closed."))
+        }
+        .alert(L("确定重启服务「\(service.name)」吗？", "Restart service \"\(service.name)\"?"), isPresented: $showRestartConfirm) {
+            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(L("重启服务", "Restart")) {
+                Task { await supervisor.restartService(service) }
+            }
+        } message: {
+            Text(L("重启期间服务将短暂中断，随后将自动重新启动。", "The service will be temporarily interrupted, then automatically restarted."))
         }
     }
 
