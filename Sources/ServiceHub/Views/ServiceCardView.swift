@@ -47,56 +47,42 @@ struct ServiceCardView: View {
                     ProgressView()
                         .controlSize(.small)
                 } else {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(currentStatus.color)
-                            .frame(width: 7, height: 7)
+                    HStack(spacing: 4.5) {
+                        StatusDotView(color: currentStatus.color, size: 6.5)
                         Text(currentStatus.displayName)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(currentStatus.color)
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(currentStatus.color.opacity(0.12))
-                    .cornerRadius(6)
+                    .padding(.horizontal, 6.5)
+                    .padding(.vertical, 2.5)
+                    .background(currentStatus.color.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4.5)
+                            .strokeBorder(currentStatus.color.opacity(0.22), lineWidth: 0.5)
+                    )
+                    .cornerRadius(4.5)
                 }
             }
 
             // 中部指标：公网竖条、PID、运行时长、熔断提示、前置条件标签
-            HStack(spacing: 8) {
-                // 公网暴露标识：左侧 3pt 紫色渐变竖条（比 Badge 更克制，不挤压头部）
+            HStack(spacing: 6) {
+                // 公网暴露标识：左侧 2.5pt 紫色极简竖条
                 if tunnelManager.isTunnelActive(for: service.id) {
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(
-                            LinearGradient(
-                                colors: [.purple, .pink],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .frame(width: 3, height: 16)
+                    RoundedRectangle(cornerRadius: 1.2)
+                        .fill(Color.purple)
+                        .frame(width: 2.5, height: 14)
                 }
 
                 if let pid = runtimeInfo.pid, currentStatus == .running {
-                    Label("\(pid)", systemImage: "cpu")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.primary)
+                    ProBadgeView("\(pid)", icon: "cpu", tint: .primary, isMonospaced: true)
                 }
 
                 if let uptime = runtimeInfo.uptime, currentStatus == .running {
-                    Label(uptime, systemImage: "clock")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                    ProBadgeView(uptime, icon: "clock", tint: .secondary)
                 } else if currentStatus == .waitingPrecondition {
-                    Label(runtimeInfo.uptime ?? L("等待条件", "Waiting"), systemImage: "hourglass")
-                        .font(.system(size: 10))
-                        .foregroundColor(.orange)
-                        .lineLimit(1)
+                    ProBadgeView(runtimeInfo.uptime ?? L("等待条件", "Waiting"), icon: "hourglass", tint: .orange)
                 } else if supervisor.isCircuitBroken[service.id] == true {
-                    Label(L("已暂停保活", "Keep-alive paused"), systemImage: "exclamationmark.octagon.fill")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.red)
+                    ProBadgeView(L("已暂停保活", "Keep-alive paused"), icon: "exclamationmark.octagon.fill", tint: .red)
                 } else if currentStatus == .stopped {
                     Text(L("未运行", "Stopped"))
                         .font(.system(size: 10))
@@ -106,13 +92,7 @@ struct ServiceCardView: View {
                 Spacer()
 
                 if service.precondition != .none && currentStatus != .running {
-                    Text(service.precondition.shortName)
-                        .font(.system(size: 9))
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.1))
-                        .cornerRadius(4)
+                    ProBadgeView(service.precondition.shortName, tint: .secondary)
                 }
             }
             .frame(height: 18)
@@ -136,6 +116,7 @@ struct ServiceCardView: View {
                     }) {
                         Image(systemName: "doc.on.doc")
                             .font(.system(size: 9))
+                            .foregroundColor(.purple.opacity(0.85))
                     }
                     .buttonStyle(.plain)
                     .help(L("复制公网链接", "Copy public URL"))
@@ -145,6 +126,7 @@ struct ServiceCardView: View {
                     }) {
                         Image(systemName: "arrow.up.right.square")
                             .font(.system(size: 9))
+                            .foregroundColor(.purple.opacity(0.85))
                     }
                     .buttonStyle(.plain)
                     .help(L("在浏览器打开公网链接", "Open public URL in browser"))
@@ -161,11 +143,11 @@ struct ServiceCardView: View {
             .background(
                 Group {
                     if tunnelManager.publicUrls[service.id] != nil {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.purple.opacity(0.12))
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(Color.purple.opacity(0.08))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .strokeBorder(Color.purple.opacity(0.25), lineWidth: 0.5)
+                                RoundedRectangle(cornerRadius: 5)
+                                    .strokeBorder(Color.purple.opacity(0.2), lineWidth: 0.5)
                             )
                     }
                 }
@@ -184,7 +166,7 @@ struct ServiceCardView: View {
                                 .font(.system(size: 11))
                         }
                     }
-                    .liquidGlassButton(tint: .red)
+                    .proButton(tint: .red)
                     .controlSize(.small)
                     .disabled(isBusy)
 
@@ -192,7 +174,7 @@ struct ServiceCardView: View {
                         Text(L("重启", "Restart"))
                             .font(.system(size: 11))
                     }
-                    .liquidGlassButton(tint: .blue)
+                    .proButton(tint: .blue)
                     .controlSize(.small)
                     .disabled(isBusy)
                     .help(L("重启服务", "Restart service"))
@@ -205,7 +187,7 @@ struct ServiceCardView: View {
                                 .font(.system(size: 11))
                         }
                     }
-                    .liquidGlassButton(tint: .green)
+                    .proButton(tint: .green)
                     .controlSize(.small)
                     .disabled(isBusy)
                 }
@@ -217,7 +199,7 @@ struct ServiceCardView: View {
                         Image(systemName: "safari")
                             .font(.system(size: 11))
                     }
-                    .liquidGlassButton(tint: .blue)
+                    .proButton(tint: .blue)
                     .controlSize(.small)
                     .help(L("打开服务主页: \(webStr)", "Open homepage: \(webStr)"))
                 }
@@ -234,7 +216,7 @@ struct ServiceCardView: View {
                                 .font(.system(size: 10))
                         }
                     }
-                    .liquidGlassButton(tint: .purple)
+                    .proButton(tint: .purple)
                     .controlSize(.small)
                     .help(isTunneled ? L("点击断开当前公网映射", "Click to disconnect the public tunnel") : L("通过 Cloudflare 隧道一键将本地服务映射到公网", "Expose this service via a Cloudflare Tunnel"))
                 }
@@ -274,9 +256,9 @@ struct ServiceCardView: View {
             }
         }
         .padding(12)
-        // 动态透光液态玻璃卡片容器
-        .liquidGlassCard(statusColor: currentStatus.color, isSelected: isSelected, cornerRadius: 12)
-        .contentShape(RoundedRectangle(cornerRadius: 12))
+        // Raycast / Linear 风格精密专业卡片
+        .proCard(statusColor: currentStatus.color, isSelected: isSelected, cornerRadius: ProTheme.cornerRadiusCard)
+        .contentShape(RoundedRectangle(cornerRadius: ProTheme.cornerRadiusCard))
         .onTapGesture {
             onSelect()
         }
@@ -308,41 +290,6 @@ struct ServiceCardView: View {
 
     private var isBusy: Bool {
         supervisor.isBusy[service.id] == true
-    }
-
-    /// 根据运行中/已停止等状态分配高对比度底色
-    private var cardBackgroundColor: Color {
-        switch currentStatus {
-        case .running:
-            // 运行中：带有轻微清爽的翡翠绿/强调色呼吸感底色
-            return Color.green.opacity(0.06).opacity(1.0)
-        case .waitingPrecondition:
-            // 等待前置条件：带有温和的暖橙色底色
-            return Color.orange.opacity(0.06)
-        case .failed:
-            // 异常/熔断：微淡红色底色
-            return Color.red.opacity(0.07)
-        default:
-            // 已停止/未启动：采用中性暗灰/低调底色，与运行状态形成极强反差
-            return Color(NSColor.windowBackgroundColor).opacity(0.65)
-        }
-    }
-
-    /// 边框描边颜色
-    private var cardBorderColor: Color {
-        if isSelected {
-            return Color.accentColor
-        }
-        switch currentStatus {
-        case .running:
-            return Color.green.opacity(0.28)
-        case .waitingPrecondition:
-            return Color.orange.opacity(0.3)
-        case .failed:
-            return Color.red.opacity(0.35)
-        default:
-            return Color.secondary.opacity(0.12)
-        }
     }
 
     private func toggleTunnel() {

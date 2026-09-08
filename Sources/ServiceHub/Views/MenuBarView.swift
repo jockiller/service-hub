@@ -59,11 +59,25 @@ struct MenuBarView: View {
                             ServiceIconView(service: s, size: 26)
 
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(s.name)
-                                    .font(.system(size: 13, weight: .medium))
-                                    .lineLimit(1)
+                                HStack(spacing: 5) {
+                                    Text(s.name)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .lineLimit(1)
 
-                                HStack(spacing: 6) {
+                                    if let webStr = s.webURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                                       !webStr.isEmpty,
+                                       let url = URL(string: webStr) {
+                                        Button(action: { NSWorkspace.shared.open(url) }) {
+                                            Image(systemName: "safari")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.accentColor)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help(L("打开服务主页: \(webStr)", "Open homepage: \(webStr)"))
+                                    }
+                                }
+
+                                HStack(spacing: 5) {
                                     Text(s.category.shortName)
                                         .font(.system(size: 9, weight: .semibold))
                                         .foregroundColor(s.category.color)
@@ -72,18 +86,10 @@ struct MenuBarView: View {
                                         .background(s.category.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
 
                                     HStack(spacing: 4) {
-                                        Circle()
-                                            .fill(st.color)
-                                            .frame(width: 6, height: 6)
+                                        StatusDotView(color: st.color, size: 6)
                                         Text(st.displayName)
-                                            .font(.system(size: 10))
+                                            .font(.system(size: 10, weight: .medium))
                                             .foregroundColor(st.color)
-                                    }
-
-                                    if let pid = rt?.pid, st == .running {
-                                        Text("PID: \(pid)")
-                                            .font(.system(size: 9, design: .monospaced))
-                                            .foregroundColor(.secondary)
                                     }
 
                                     if let uptime = rt?.uptime, st == .running {
@@ -95,19 +101,7 @@ struct MenuBarView: View {
                                 }
                             }
 
-                            Spacer()
-
-                            if let webStr = s.webURL?.trimmingCharacters(in: .whitespacesAndNewlines),
-                               !webStr.isEmpty,
-                               let url = URL(string: webStr) {
-                                Button(action: { NSWorkspace.shared.open(url) }) {
-                                    Image(systemName: "safari")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.accentColor)
-                                }
-                                .buttonStyle(.plain)
-                                .help(L("打开服务主页: \(webStr)", "Open homepage: \(webStr)"))
-                            }
+                            Spacer(minLength: 4)
 
                             // 每一个服务独立的控制按钮组：启动 / 关闭 / 重启
                             if isBusy {
@@ -119,26 +113,26 @@ struct MenuBarView: View {
                                     Button(L("关闭", "Stop")) {
                                         Task { await supervisor.stopService(s) }
                                     }
-                                    .liquidGlassButton(tint: .red)
+                                    .proButton(tint: .red)
                                     .controlSize(.small)
 
                                     Button(L("重启", "Restart")) {
                                         Task { await supervisor.restartService(s) }
                                     }
-                                    .liquidGlassButton(tint: .blue)
+                                    .proButton(tint: .blue)
                                     .controlSize(.small)
                                 }
                             } else {
                                 Button(L("启动", "Start")) {
                                     Task { await supervisor.startService(s) }
                                 }
-                                .liquidGlassButton(tint: .green)
+                                .proButton(tint: .green)
                                 .controlSize(.small)
                             }
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
-                        .liquidGlassCard(statusColor: st.color, cornerRadius: 8)
+                        .proCard(statusColor: st.color, cornerRadius: 8)
                     }
                 }
                 .padding(12)
@@ -167,7 +161,8 @@ struct MenuBarView: View {
             .padding(.vertical, 8)
             .background(Color(NSColor.windowBackgroundColor))
         }
-        .frame(width: 360)
+        .frame(width: 375)
+        .background(Color(NSColor.windowBackgroundColor))
     }
 
     private func openMainWindow() {

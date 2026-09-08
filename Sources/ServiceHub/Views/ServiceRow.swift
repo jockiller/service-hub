@@ -21,12 +21,10 @@ struct ServiceRow: View {
                         .padding(.vertical, 1)
                         .background(service.category.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
 
-                    Circle()
-                        .fill(currentStatus.color)
-                        .frame(width: 7, height: 7)
+                    StatusDotView(color: currentStatus.color, size: 6.5)
                     Text(currentStatus.displayName)
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(currentStatus.color)
                 }
             }
 

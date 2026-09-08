@@ -4,7 +4,7 @@ set -e
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$DIR"
 
-VERSION="${1:-1.0.0}"
+VERSION="${1:-1.6.0}"
 APP_NAME="ServiceHub"
 BUILD_DIR="$DIR/build"
 APP_BUNDLE="$BUILD_DIR/${APP_NAME}.app"
@@ -14,7 +14,7 @@ DMG_PATH="$BUILD_DIR/$DMG_NAME"
 ZIP_PATH="$BUILD_DIR/$ZIP_NAME"
 
 echo "==> 1. 编译并构建 Release App Bundle..."
-"$DIR/scripts/build_app.sh"
+"$DIR/scripts/build_app.sh" "$VERSION"
 
 echo "==> 2. 执行 macOS Ad-Hoc 深度代码签名..."
 # 对 Mach-O 二进制文件及 App Bundle 执行深度代码签名（确保在 Apple Silicon / ARM64 上具备完整哈希签名）

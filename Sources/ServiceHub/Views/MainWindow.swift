@@ -61,34 +61,52 @@ struct MainWindow: View {
         VStack(spacing: 0) {
             // 上半部分顶部：安全过滤与状态标签栏
             HStack(spacing: 8) {
-                ForEach(ServiceFilter.allCases, id: \.self) { f in
-                    let count = countForFilter(f)
-                    Button(action: { filter = f }) {
-                        HStack(spacing: 5) {
-                            Text(f.title)
-                            Text("\(count)")
-                                .font(.caption2.bold())
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1.5)
-                                .background(filter == f ? Color.accentColor : Color.secondary.opacity(0.14))
-                                .foregroundColor(filter == f ? .white : (f == .tunneled && count > 0 ? .orange : .secondary))
-                                .cornerRadius(8)
-                        }
-                        .font(.system(size: 11, weight: filter == f ? .semibold : .regular))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            Group {
-                                if filter == f {
-                                    RoundedRectangle(cornerRadius: 7)
-                                        .fill(Color.accentColor.opacity(0.15))
-                                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 0.5))
-                                }
+                HStack(spacing: 4) {
+                    ForEach(ServiceFilter.allCases, id: \.self) { f in
+                        let count = countForFilter(f)
+                        let isSelected = filter == f
+                        Button(action: { filter = f }) {
+                            HStack(spacing: 5) {
+                                Text(f.title)
+                                Text("\(count)")
+                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                    .padding(.horizontal, 4.5)
+                                    .padding(.vertical, 1)
+                                    .background(
+                                        isSelected
+                                            ? Color.accentColor.opacity(0.2)
+                                            : Color.primary.opacity(0.06)
+                                    )
+                                    .foregroundColor(
+                                        isSelected
+                                            ? .accentColor
+                                            : (f == .tunneled && count > 0 ? .orange : .secondary)
+                                    )
+                                    .cornerRadius(4)
                             }
-                        )
+                            .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                Group {
+                                    if isSelected {
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(Color.accentColor.opacity(0.12))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .strokeBorder(Color.accentColor.opacity(0.3), lineWidth: 0.5)
+                                            )
+                                    }
+                                }
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(isSelected ? .primary : .secondary)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(3)
+                .background(Color.primary.opacity(0.04))
+                .cornerRadius(8)
 
                 Spacer()
 
@@ -105,8 +123,7 @@ struct MainWindow: View {
                         Button(L("切断全部公网", "Disconnect All")) {
                             tunnelManager.stopAllTunnels()
                         }
-                        .liquidGlassButton(tint: .red, isProminent: true)
-                        .controlSize(.mini)
+                        .proButton(tint: .red, isProminent: true, size: .mini)
                         .help(L("安全熔断：立即切断所有 Cloudflare 公网穿透映射", "Emergency kill switch: disconnect all Cloudflare tunnels"))
                     }
                     .padding(.horizontal, 8)
@@ -116,7 +133,7 @@ struct MainWindow: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 7)
-            .liquidGlassBar()
+            .proBar()
 
             Divider()
 
@@ -232,7 +249,7 @@ struct MainWindow: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(.thinMaterial)
+                    .proBar()
                     .contentShape(Rectangle())
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.2)) {

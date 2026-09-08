@@ -27,17 +27,19 @@ struct ServiceDetailView: View {
 
                         // 状态 Badge
                         HStack(spacing: 5) {
-                            Circle()
-                                .fill(currentStatus.color)
-                                .frame(width: 8, height: 8)
+                            StatusDotView(color: currentStatus.color, size: 7)
                             Text(currentStatus.displayName)
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(currentStatus.color)
                         }
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(currentStatus.color.opacity(0.12))
-                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5)
+                                .strokeBorder(currentStatus.color.opacity(0.25), lineWidth: 0.5)
+                        )
+                        .cornerRadius(5)
                     }
 
                     HStack(spacing: 12) {
@@ -68,26 +70,26 @@ struct ServiceDetailView: View {
                         Button(action: { showStopConfirm = true }) {
                             Label(L("停止", "Stop"), systemImage: "stop.fill")
                         }
-                        .liquidGlassButton(tint: .red)
+                        .proButton(tint: .red)
                         .disabled(isBusy)
 
                         Button(action: { showRestartConfirm = true }) {
                             Label(L("重启", "Restart"), systemImage: "arrow.clockwise")
                         }
-                        .liquidGlassButton(tint: .blue)
+                        .proButton(tint: .blue)
                         .disabled(isBusy)
                     } else {
                         Button(action: { Task { await supervisor.startService(service) } }) {
                             Label(L("启动", "Start"), systemImage: "play.fill")
                         }
-                        .liquidGlassButton(tint: .green)
+                        .proButton(tint: .green)
                         .disabled(isBusy)
                     }
 
                     Button(action: { Task { await supervisor.refreshService(service) } }) {
                         Image(systemName: "arrow.triangle.2.circlepath")
                     }
-                    .liquidGlassButton(tint: .secondary)
+                    .proButton(tint: .secondary)
                     .disabled(isBusy)
                     .help(L("刷新状态", "Refresh status"))
 

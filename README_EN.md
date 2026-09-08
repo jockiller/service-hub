@@ -56,7 +56,7 @@ In daily software development and local DevOps, developers often manage numerous
 ---
 
 ### 4. Native Menu Bar Popover Center (MenuBarExtra)
-> Compliant monochrome template menu bar icon. Click to open a dedicated Popover panel where every single service offers independent **Start**, **Stop**, and **Restart** controls, along with live PID and uptime indicators.
+> Compliant monochrome template menu bar icon. Click to open a dedicated Popover panel where every single service offers independent **Start**, **Stop**, and **Restart** controls, along with live status and uptime indicators.
 
 ![Menu Bar Extra Popover](assets/screenshots/menubar-panel.png)
 

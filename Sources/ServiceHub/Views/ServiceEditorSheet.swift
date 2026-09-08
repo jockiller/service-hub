@@ -69,7 +69,7 @@ struct ServiceEditorSheet: View {
                     .font(.headline)
                 Spacer()
                 Button(L("取消", "Cancel")) { dismiss() }
-                    .liquidGlassButton()
+                    .proButton()
                     .keyboardShortcut(.cancelAction)
             }
             .padding()
@@ -119,7 +119,7 @@ struct ServiceEditorSheet: View {
                                 .buttonStyle(.plain)
                             }
                             .padding(8)
-                            .liquidGlassCard(statusColor: .secondary, cornerRadius: 8)
+                            .proCard(statusColor: .secondary, cornerRadius: 8)
                         }
 
                         // App 快速选择
@@ -131,11 +131,11 @@ struct ServiceEditorSheet: View {
                                 Button(L("选取应用...", "Choose App...")) {
                                     pickAppAction()
                                 }
-                                .liquidGlassButton(isProminent: true)
+                                .proButton(isProminent: true)
                                 .controlSize(.small)
                             }
                             .padding(8)
-                            .liquidGlassCard(statusColor: .secondary, cornerRadius: 8)
+                            .proCard(statusColor: .secondary, cornerRadius: 8)
                         }
 
                         // Docker 快速选择 —— 仅允许选择本机已存在的容器，不支持手填名称
@@ -296,7 +296,7 @@ struct ServiceEditorSheet: View {
                                     .lineLimit(1)
                                     .fixedSize()
                             }
-                            .liquidGlassButton()
+                            .proButton()
                             .controlSize(.small)
                             .fixedSize()
                             .layoutPriority(1)
@@ -315,7 +315,7 @@ struct ServiceEditorSheet: View {
                                     .lineLimit(1)
                                     .fixedSize()
                             }
-                            .liquidGlassButton()
+                            .proButton()
                             .controlSize(.small)
                             .fixedSize()
                             .layoutPriority(1)
@@ -334,7 +334,7 @@ struct ServiceEditorSheet: View {
                                     .lineLimit(1)
                                     .fixedSize()
                             }
-                            .liquidGlassButton()
+                            .proButton()
                             .controlSize(.small)
                             .fixedSize()
                             .layoutPriority(1)
@@ -356,7 +356,7 @@ struct ServiceEditorSheet: View {
                             if !webURL.trimmingCharacters(in: .whitespaces).isEmpty,
                                let url = URL(string: webURL) {
                                 Button(L("打开", "Open")) { NSWorkspace.shared.open(url) }
-                                    .liquidGlassButton()
+                                    .proButton()
                                     .controlSize(.small)
                             }
                         }
@@ -405,7 +405,7 @@ struct ServiceEditorSheet: View {
                                     .lineLimit(1)
                                     .fixedSize()
                             }
-                            .liquidGlassButton()
+                            .proButton()
                             .controlSize(.small)
                             .fixedSize()
                             .layoutPriority(1)
@@ -460,7 +460,7 @@ struct ServiceEditorSheet: View {
                                             NSWorkspace.shared.open(u)
                                         }
                                     }
-                                    .liquidGlassButton()
+                                    .proButton()
                                     .controlSize(.small)
                                 }
                             }
@@ -486,7 +486,7 @@ struct ServiceEditorSheet: View {
                                     Label(L("测试运行启动命令", "Test Start Command"), systemImage: "play.circle")
                                 }
                             }
-                            .liquidGlassButton()
+                            .proButton()
                             .controlSize(.small)
                             .disabled(isTesting)
                             Spacer()
@@ -517,7 +517,7 @@ struct ServiceEditorSheet: View {
                 Button(L("保存", "Save")) {
                     saveAction()
                 }
-                .liquidGlassButton(isProminent: true)
+                .proButton(isProminent: true)
                 .disabled(id.trimmingCharacters(in: .whitespaces).isEmpty ||
                           name.trimmingCharacters(in: .whitespaces).isEmpty ||
                           startCommand.trimmingCharacters(in: .whitespaces).isEmpty)

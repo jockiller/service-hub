@@ -47,21 +47,18 @@ struct ServiceListView: View {
 
                     // 状态 Badge
                     let st = supervisor.statuses[s.id] ?? .unknown
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(st.color)
-                            .frame(width: 7, height: 7)
+                    HStack(spacing: 5) {
+                        StatusDotView(color: st.color, size: 6.5)
                         Text(st.displayName)
-                            .font(.system(size: 11))
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundColor(st.color)
                     }
-                    .frame(width: 80, alignment: .leading)
+                    .frame(width: 85, alignment: .leading)
 
                     // 进程 PID
                     let rt = supervisor.runtimes[s.id]
                     if let pid = rt?.pid, st == .running {
-                        Label("\(pid)", systemImage: "cpu")
-                            .font(.system(size: 11, design: .monospaced))
+                        ProBadgeView("\(pid)", icon: "cpu", tint: .primary, isMonospaced: true)
                             .frame(width: 90, alignment: .leading)
                     } else {
                         Text("--")
@@ -72,19 +69,13 @@ struct ServiceListView: View {
 
                     // 启动时间 / 运行时长 / 前置条件
                     if let uptime = rt?.uptime, st == .running {
-                        Label(uptime, systemImage: "clock")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
+                        ProBadgeView(uptime, icon: "clock", tint: .secondary)
                             .frame(width: 120, alignment: .leading)
                     } else if st == .waitingPrecondition {
-                        Label(rt?.uptime ?? "等待条件", systemImage: "hourglass")
-                            .font(.system(size: 11))
-                            .foregroundColor(.orange)
+                        ProBadgeView(rt?.uptime ?? L("等待条件", "Waiting"), icon: "hourglass", tint: .orange)
                             .frame(width: 120, alignment: .leading)
                     } else if s.precondition != .none {
-                        Text("[\(s.precondition.shortName)]")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
+                        ProBadgeView(s.precondition.shortName, tint: .secondary)
                             .frame(width: 120, alignment: .leading)
                     } else {
                         Text("--")
@@ -150,13 +141,13 @@ struct ServiceListView: View {
                             Button(L("停止", "Stop")) {
                                 serviceToStop = s
                             }
-                            .liquidGlassButton(tint: .red)
+                            .proButton(tint: .red)
                             .controlSize(.small)
 
                             Button(action: { serviceToRestart = s }) {
                                 Text(L("重启", "Restart"))
                             }
-                            .liquidGlassButton(tint: .blue)
+                            .proButton(tint: .blue)
                             .controlSize(.small)
                             .help(L("重启服务", "Restart service"))
                         }
@@ -164,7 +155,7 @@ struct ServiceListView: View {
                         Button(L("启动", "Start")) {
                             Task { await supervisor.startService(s) }
                         }
-                        .liquidGlassButton(tint: .green)
+                        .proButton(tint: .green)
                         .controlSize(.small)
                     }
 
@@ -174,7 +165,7 @@ struct ServiceListView: View {
                         Button(action: { NSWorkspace.shared.open(url) }) {
                             Image(systemName: "safari")
                         }
-                        .liquidGlassButton(tint: .blue)
+                        .proButton(tint: .blue)
                         .controlSize(.small)
                         .help(L("打开主页: \(webStr)", "Open homepage: \(webStr)"))
                     }
@@ -188,7 +179,7 @@ struct ServiceListView: View {
                                 Text(L("断开", "Disconnect"))
                             }
                         }
-                        .liquidGlassButton(tint: .purple)
+                        .proButton(tint: .purple)
                         .controlSize(.small)
                         .help(L("已暴露至公网，点击切断", "Exposed to public; click to disconnect"))
                     } else {
@@ -198,7 +189,7 @@ struct ServiceListView: View {
                                 Text(L("公网", "Public"))
                             }
                         }
-                        .liquidGlassButton(tint: .purple)
+                        .proButton(tint: .purple)
                         .controlSize(.small)
                         .help(L("通过 Cloudflare Tunnel 一键穿透映射到公网", "Expose via Cloudflare Tunnel"))
                     }

@@ -37,7 +37,7 @@ struct SettingsView: View {
                 Spacer()
             }
             .padding(16)
-            .liquidGlassBar()
+            .proBar()
 
             Divider()
 
@@ -136,7 +136,7 @@ struct SettingsView: View {
                             Button(L("更改路径...", "Change Path...")) {
                                 chooseCustomPath()
                             }
-                            .liquidGlassButton()
+                            .proButton()
                             .controlSize(.small)
 
                             if !settings.customConfigPath.isEmpty {
@@ -145,7 +145,7 @@ struct SettingsView: View {
                                     alertMessage = L("已恢复至默认存储路径", "Restored to the default storage path")
                                     showAlert = true
                                 }
-                                .liquidGlassButton()
+                                .proButton()
                                 .controlSize(.small)
                             }
 
@@ -154,7 +154,7 @@ struct SettingsView: View {
                             Button(L("在访达中显示", "Reveal in Finder")) {
                                 NSWorkspace.shared.activateFileViewerSelecting([store.configURL])
                             }
-                            .liquidGlassButton()
+                            .proButton()
                             .controlSize(.small)
                         }
                     }
@@ -173,7 +173,7 @@ struct SettingsView: View {
                 Button(L("完成", "Done")) {
                     dismiss()
                 }
-                .liquidGlassButton(isProminent: true)
+                .proButton(isProminent: true)
                 .keyboardShortcut(.defaultAction)
             }
             .padding(12)
