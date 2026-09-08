@@ -71,12 +71,27 @@ public final class Supervisor: ObservableObject {
     private func applyProbeResult(_ res: ProbeResult, for service: Service) {
         if res.status != .unknown {
             let prevStatus = self.statuses[service.id]
+            let prevRuntime = self.runtimes[service.id]
             self.statuses[service.id] = res.status
-            self.runtimes[service.id] = ServiceRuntimeInfo(
-                status: res.status,
-                pid: res.status == .running ? res.pid : nil,
-                uptime: res.status == .running ? res.uptimeString : nil
-            )
+
+            if res.status == .running {
+                // 运行态数据平滑保护：
+                // 如果单次探活未能重新抓取到 PID 或运行时长（如子命令或探活偶发延迟），继承上一轮的有效值，彻底杜绝周期性清空闪烁
+                let effectivePid = res.pid ?? prevRuntime?.pid
+                let effectiveUptime = res.uptimeString ?? prevRuntime?.uptime
+                self.runtimes[service.id] = ServiceRuntimeInfo(
+                    status: .running,
+                    pid: effectivePid,
+                    uptime: effectiveUptime
+                )
+            } else {
+                // 明确停止或故障时，才清空 PID 与运行时长
+                self.runtimes[service.id] = ServiceRuntimeInfo(
+                    status: res.status,
+                    pid: nil,
+                    uptime: nil
+                )
+            }
 
             // 如果当前正处于“等待前置条件”，检查条件是否已恢复满足
             if self.statuses[service.id] == .waitingPrecondition && service.autoStart {
@@ -242,10 +257,12 @@ public final class Supervisor: ObservableObject {
         let probeRes = await HealthProbe.probe(service: service)
         let finalStatus = (probeRes.status == .unknown ? (result.isSuccess ? .running : .failed) : probeRes.status)
         statuses[service.id] = finalStatus
+        let effectivePid = probeRes.pid ?? runtimes[service.id]?.pid
+        let effectiveUptime = probeRes.uptimeString ?? runtimes[service.id]?.uptime
         runtimes[service.id] = ServiceRuntimeInfo(
             status: finalStatus,
-            pid: finalStatus == .running ? probeRes.pid : nil,
-            uptime: finalStatus == .running ? probeRes.uptimeString : nil
+            pid: finalStatus == .running ? effectivePid : nil,
+            uptime: finalStatus == .running ? effectiveUptime : nil
         )
 
         // 启动成功后，若勾选了“启动后打开主页”，自动调用默认浏览器打开
