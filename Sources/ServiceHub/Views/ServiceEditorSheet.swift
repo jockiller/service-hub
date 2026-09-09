@@ -591,7 +591,7 @@ struct ServiceEditorSheet: View {
         id = trimmed
         name = trimmed.capitalized
         icon = item.recommendedIcon
-        startCommand = "/opt/homebrew/bin/brew services start \(trimmed)"
+        startCommand = "/opt/homebrew/bin/brew services run \(trimmed)"
         stopCommand = "/opt/homebrew/bin/brew services stop \(trimmed)"
         statusCommand = "/opt/homebrew/bin/brew services list | grep \"\(trimmed)\" | grep started"
     }
