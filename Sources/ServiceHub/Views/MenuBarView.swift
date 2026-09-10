@@ -76,6 +76,15 @@ struct MenuBarView: View {
                                         .buttonStyle(.plain)
                                         .help(L("打开服务主页: \(webStr)", "Open homepage: \(webStr)"))
                                     }
+
+                                    if supervisor.updatesAvailable[s.id] == true {
+                                        Text(L("可更新", "Update"))
+                                            .font(.system(size: 8, weight: .bold))
+                                            .padding(.horizontal, 3.5)
+                                            .padding(.vertical, 1)
+                                            .background(Color.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 2.5))
+                                            .foregroundColor(.blue)
+                                    }
                                 }
 
                                 HStack(spacing: 5) {

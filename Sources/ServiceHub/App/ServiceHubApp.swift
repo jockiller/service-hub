@@ -60,6 +60,10 @@ struct ServiceHubApp: App {
                     // 应用启动后延迟拉起勾选了「随 ServiceHub 启动」的服务
                     try? await Task.sleep(nanoseconds: 500_000_000)
                     Supervisor.shared.launchServicesAtStartup()
+
+                    // 应用启动后延迟 3 秒，在后台对勾选了检查更新的服务执行一次更新检测
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    Supervisor.shared.checkUpdatesForAllServices()
                 }
         }
         .windowStyle(.titleBar)

@@ -337,6 +337,30 @@ struct MainWindow: View {
                 .help(L("偏好设置与关于", "Settings & About"))
 
                 Menu {
+                    Button(L("检查所有服务更新", "Check All Service Updates")) {
+                        Task {
+                            let services = store.services.filter { $0.checkUpdateEnabled }
+                            guard !services.isEmpty else {
+                                alertMessage = L("尚未对任何服务开启更新检测。", "No services have update checks enabled.")
+                                showAlert = true
+                                return
+                            }
+                            var updatedCount = 0
+                            for s in services {
+                                let res = await supervisor.checkUpdate(for: s)
+                                if case .updateAvailable = res {
+                                    updatedCount += 1
+                                }
+                            }
+                            if updatedCount > 0 {
+                                alertMessage = L("检查完成，发现 \(updatedCount) 个服务有可用更新。", "Check complete. \(updatedCount) service(s) have updates available.")
+                            } else {
+                                alertMessage = L("检查完成，所有服务均已是最新版本。", "Check complete. All services are up to date.")
+                            }
+                            showAlert = true
+                        }
+                    }
+                    Divider()
                     Button(L("导出服务配置备份 (YAML)...", "Export Config Backup (YAML)...")) {
                         exportBackup()
                     }
@@ -360,6 +384,9 @@ struct MainWindow: View {
                 store.addService(newService)
                 Task {
                     await supervisor.probeService(newService)
+                    if newService.checkUpdateEnabled {
+                        await supervisor.checkUpdate(for: newService)
+                    }
                 }
             }
         }
@@ -371,6 +398,9 @@ struct MainWindow: View {
                 store.updateService(updated)
                 Task {
                     await supervisor.probeService(updated)
+                    if updated.checkUpdateEnabled {
+                        await supervisor.checkUpdate(for: updated)
+                    }
                 }
             }
         }
@@ -381,6 +411,7 @@ struct MainWindow: View {
             Button(L("取消", "Cancel"), role: .cancel) { serviceToDelete = nil }
             Button(L("删除", "Delete"), role: .destructive) {
                 if let s = serviceToDelete {
+                    supervisor.cleanupServiceState(id: s.id)
                     store.removeService(id: s.id)
                 }
                 serviceToDelete = nil

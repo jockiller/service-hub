@@ -10,6 +10,8 @@ struct ServiceDetailView: View {
     @State private var showDeleteAlert = false
     @State private var showStopConfirm = false
     @State private var showRestartConfirm = false
+    @State private var showUpdateConfirm = false
+    @State private var showAlreadyLatestAlert = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -86,6 +88,23 @@ struct ServiceDetailView: View {
                         .disabled(isBusy)
                     }
 
+                    if supervisor.isUpdatingServices[service.id] == true {
+                        HStack(spacing: 4) {
+                            ProgressView().controlSize(.small)
+                            Text(L("更新中...", "Updating..."))
+                                .font(.system(size: 11))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.12))
+                        .cornerRadius(6)
+                    } else if supervisor.updatesAvailable[service.id] == true {
+                        Button(action: { showUpdateConfirm = true }) {
+                            Label(L("更新并重启", "Update & Restart"), systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .proButton(tint: .blue)
+                    }
+
                     Button(action: { Task { await supervisor.refreshService(service) } }) {
                         Image(systemName: "arrow.triangle.2.circlepath")
                     }
@@ -97,6 +116,43 @@ struct ServiceDetailView: View {
                         Button(L("编辑服务配置...", "Edit Service...")) {
                             showEditSheet = true
                         }
+                        Button(L("刷新状态", "Refresh Status")) {
+                            Task { await supervisor.probeService(service) }
+                        }
+
+                        if service.checkUpdateEnabled {
+                            Divider()
+                            Button {
+                                Task {
+                                    let res = await supervisor.checkUpdate(for: service)
+                                    switch res {
+                                    case .alreadyUpToDate:
+                                        showAlreadyLatestAlert = true
+                                    case .updateAvailable:
+                                        showUpdateConfirm = true
+                                    case .failed:
+                                        break
+                                    }
+                                }
+                            } label: {
+                                if supervisor.isCheckingUpdates[service.id] == true {
+                                    Label(L("正在检测更新...", "Checking for updates..."), systemImage: "arrow.clockwise")
+                                } else {
+                                    Label(L("检查更新", "Check for Updates"), systemImage: "arrow.clockwise")
+                                }
+                            }
+                            .disabled(supervisor.isCheckingUpdates[service.id] == true || supervisor.isUpdatingServices[service.id] == true)
+
+                            if supervisor.updatesAvailable[service.id] == true || (service.updateCommand != nil && !service.updateCommand!.isEmpty) {
+                                Button {
+                                    showUpdateConfirm = true
+                                } label: {
+                                    Label(L("立即更新并重启", "Update and Restart"), systemImage: "arrow.triangle.2.circlepath")
+                                }
+                                .disabled(supervisor.isUpdatingServices[service.id] == true)
+                            }
+                        }
+
                         Divider()
                         Button(role: .destructive, action: { showDeleteAlert = true }) {
                             Label(L("删除服务", "Delete Service"), systemImage: "trash")
@@ -112,6 +168,28 @@ struct ServiceDetailView: View {
             .background(Color(NSColor.controlBackgroundColor))
 
             Divider()
+
+            // 可用更新提示栏
+            if supervisor.updatesAvailable[service.id] == true {
+                HStack {
+                    Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                        .foregroundColor(.blue)
+                    Text(L("检测到新版本: \(supervisor.updateInfos[service.id] ?? "")", "New version detected: \(supervisor.updateInfos[service.id] ?? "")"))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.blue)
+                    Spacer()
+                    Button(L("立即更新并重启", "Update & Restart")) {
+                        showUpdateConfirm = true
+                    }
+                    .proButton(tint: .blue)
+                    .controlSize(.mini)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.08))
+
+                Divider()
+            }
 
             // 最近命令输出通知栏（如果有）
             if let output = supervisor.lastOutputs[service.id], !output.isEmpty {
@@ -141,11 +219,17 @@ struct ServiceDetailView: View {
         .sheet(isPresented: $showEditSheet) {
             ServiceEditorSheet(serviceToEdit: service) { updated in
                 store.updateService(updated)
+                Task {
+                    if updated.checkUpdateEnabled {
+                        await supervisor.checkUpdate(for: updated)
+                    }
+                }
             }
         }
         .alert(L("确定删除服务 \(service.name) 吗？", "Delete service \(service.name)?"), isPresented: $showDeleteAlert) {
             Button(L("取消", "Cancel"), role: .cancel) {}
             Button(L("删除", "Delete"), role: .destructive) {
+                supervisor.cleanupServiceState(id: service.id)
                 store.removeService(id: service.id)
             }
         } message: {
@@ -166,6 +250,23 @@ struct ServiceDetailView: View {
             }
         } message: {
             Text(L("重启期间服务将短暂中断，随后将自动重新启动。", "The service will be temporarily interrupted, then automatically restarted."))
+        }
+        .alert(L("已是最新版本", "Already Up to Date"), isPresented: $showAlreadyLatestAlert) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(L("服务「\(service.name)」当前已是最新版本，无需更新。", "Service \"\(service.name)\" is already up to date."))
+        }
+        .alert(L("确定更新服务「\(service.name)」吗？", "Update service \"\(service.name)\"?"), isPresented: $showUpdateConfirm) {
+            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(L("立即更新并重启", "Update & Restart")) {
+                Task { await supervisor.performUpdate(for: service) }
+            }
+        } message: {
+            if let info = supervisor.updateInfos[service.id], !info.isEmpty {
+                Text(L("检测到更新内容: \(info)\n更新完成后将自动重启该服务。", "Detected update: \(info)\nThe service will be restarted automatically."))
+            } else {
+                Text(L("更新完成后将自动重启该服务。", "The service will be restarted automatically after updating."))
+            }
         }
     }
 

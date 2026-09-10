@@ -22,6 +22,15 @@ public final class Supervisor: ObservableObject {
     @Published public var isBusy: [String: Bool] = [:]
     @Published public var lastOutputs: [String: String] = [:]
 
+    /// 各服务是否有可用更新
+    @Published public var updatesAvailable: [String: Bool] = [:]
+    /// 各服务的更新信息/版本文本提示
+    @Published public var updateInfos: [String: String] = [:]
+    /// 正在检测更新中的服务 ID
+    @Published public var isCheckingUpdates: [String: Bool] = [:]
+    /// 正在执行升级中的服务 ID
+    @Published public var isUpdatingServices: [String: Bool] = [:]
+
     private var probeTimer: Timer?
     /// 记录各服务在短时间内的自动重启尝试时间戳，用于滑动时间窗口熔断
     private var restartTimestamps: [String: [Date]] = [:]
@@ -348,6 +357,15 @@ public final class Supervisor: ObservableObject {
             CloudflareTunnelManager.shared.startTunnel(for: service)
         }
 
+        // 若服务勾选了检查更新，启动成功后在后台异步检测是否有更新
+        if finalStatus == .running, service.checkUpdateEnabled {
+            Task { [weak self] in
+                // 缓冲 2 秒，等待服务完成自身端口监听与就绪
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                await self?.checkUpdate(for: service)
+            }
+        }
+
         isBusy[service.id] = false
     }
 
@@ -427,5 +445,153 @@ public final class Supervisor: ObservableObject {
                 await stopService(s)
             }
         }
+    }
+
+    // MARK: - 服务更新与升级管理
+
+    public enum CheckUpdateResult: Sendable {
+        case updateAvailable(String)
+        case alreadyUpToDate
+        case failed(String)
+    }
+
+    /// 检测单个服务是否有新版本/可用更新
+    @discardableResult
+    public func checkUpdate(for service: Service) async -> CheckUpdateResult {
+        guard service.checkUpdateEnabled,
+              let checkCmd = service.checkUpdateCommand?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !checkCmd.isEmpty else {
+            return .failed(L("未启用或未配置检测更新命令", "Update check not configured"))
+        }
+
+        // 防重入
+        if isCheckingUpdates[service.id] == true || isUpdatingServices[service.id] == true {
+            return .failed(L("正在检测中，请稍候...", "Check already in progress"))
+        }
+
+        isCheckingUpdates[service.id] = true
+        defer { isCheckingUpdates[service.id] = false }
+
+        print("[Supervisor] 正在检测服务「\(service.name)」更新...")
+        let res = await ProcessRunner.run(command: checkCmd, timeout: 30)
+
+        // 针对 Homebrew outdated 的退出码特性：有更新时退出码为 1，无更新时退出码为 0
+        let isBrewCheck = checkCmd.contains("brew outdated")
+        let meaningfulLine = extractMeaningfulUpdateLine(from: res.output)
+
+        if (res.isSuccess || (isBrewCheck && res.exitCode == 1)) && meaningfulLine != nil {
+            let updateLine = meaningfulLine!
+            updatesAvailable[service.id] = true
+            updateInfos[service.id] = updateLine
+            print("[Supervisor] 服务「\(service.name)」检测到可用更新: \(updateLine)")
+            return .updateAvailable(updateLine)
+        } else {
+            updatesAvailable[service.id] = false
+            updateInfos[service.id] = nil
+            if res.isSuccess || (isBrewCheck && res.exitCode == 0) {
+                print("[Supervisor] 服务「\(service.name)」当前已是最新")
+                return .alreadyUpToDate
+            } else {
+                print("[Supervisor] 服务「\(service.name)」检测更新退出码: \(res.exitCode)")
+                return .failed(L("检测命令返回退出码 \(res.exitCode)", "Check exited with code \(res.exitCode)"))
+            }
+        }
+    }
+
+    /// 从检测命令输出中提取有价值的版本信息行，过滤掉包管理器下载/进度等干扰行
+    private func extractMeaningfulUpdateLine(from output: String) -> String? {
+        let lines = output.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { line in
+                !line.isEmpty &&
+                !line.hasPrefix("==>") &&
+                !line.hasPrefix("✔") &&
+                !line.hasPrefix("✖") &&
+                !line.hasPrefix("ℹ") &&
+                !line.hasPrefix("Downloading") &&
+                !line.hasPrefix("Downloaded") &&
+                !line.hasPrefix("Fetching") &&
+                !line.hasPrefix("Cloning") &&
+                !line.contains("JSON API") &&
+                !line.contains("Already up to date")
+            }
+        return lines.first
+    }
+
+    /// 对所有已开启检查更新的服务触发一次更新检测
+    public func checkUpdatesForAllServices() {
+        let services = ServiceStore.shared.services.filter { $0.checkUpdateEnabled }
+        guard !services.isEmpty else { return }
+        print("[Supervisor] 正在对 \(services.count) 个已开启更新检测的服务触发后台检查...")
+        Task { [weak self] in
+            for s in services {
+                await self?.checkUpdate(for: s)
+            }
+        }
+    }
+
+    /// 执行更新操作并在完成后重启服务
+    public func performUpdate(for service: Service) async {
+        guard let updateCmd = service.updateCommand?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !updateCmd.isEmpty else {
+            print("[-] 服务「\(service.name)」未配置更新命令")
+            return
+        }
+
+        if isUpdatingServices[service.id] == true || isBusy[service.id] == true {
+            return
+        }
+
+        isUpdatingServices[service.id] = true
+        defer { isUpdatingServices[service.id] = false }
+
+        let wasRunning = (statuses[service.id] == .running)
+
+        // 1. 若当前处于运行中，先优雅停止服务
+        if wasRunning {
+            print("[Supervisor] 正在停止服务「\(service.name)」以便执行更新...")
+            await stopService(service)
+        }
+
+        // 2. 执行更新命令（适当提供充足超时，如 180 秒）
+        print("[Supervisor] 开始执行服务「\(service.name)」的更新命令...")
+        lastOutputs[service.id] = L("正在更新服务...\n$ \(updateCmd)", "Updating service...\n$ \(updateCmd)")
+
+        let updateResult = await ProcessRunner.run(command: updateCmd, timeout: 180)
+        lastOutputs[service.id] = updateResult.output
+
+        if updateResult.isSuccess {
+            print("[Supervisor] 服务「\(service.name)」更新成功")
+            updatesAvailable[service.id] = false
+            updateInfos[service.id] = nil
+
+            // 3. 执行更新操作后 重启服务
+            print("[Supervisor] 更新完成，正在重启服务「\(service.name)」...")
+            await startService(service)
+        } else {
+            print("[-] 服务「\(service.name)」更新失败，退出码: \(updateResult.exitCode)")
+            statuses[service.id] = .failed
+            runtimes[service.id] = ServiceRuntimeInfo(
+                status: .failed,
+                pid: nil,
+                uptime: L("更新失败 (退出码 \(updateResult.exitCode))", "Update failed (exit code \(updateResult.exitCode))")
+            )
+        }
+    }
+
+    /// 清理单个服务相关的动态缓存状态
+    public func cleanupServiceState(id: String) {
+        statuses.removeValue(forKey: id)
+        runtimes.removeValue(forKey: id)
+        isBusy.removeValue(forKey: id)
+        lastOutputs.removeValue(forKey: id)
+        updatesAvailable.removeValue(forKey: id)
+        updateInfos.removeValue(forKey: id)
+        isCheckingUpdates.removeValue(forKey: id)
+        isUpdatingServices.removeValue(forKey: id)
+        restartTimestamps.removeValue(forKey: id)
+        isCircuitBroken.removeValue(forKey: id)
+        healthCheckFailCounts.removeValue(forKey: id)
+        pendingStartupLaunch.remove(id)
     }
 }

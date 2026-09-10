@@ -33,6 +33,10 @@ struct ServiceEditorSheet: View {
     @State private var tunnelToken: String = ""
     @State private var tunnelTarget: String = ""
 
+    @State private var checkUpdateEnabled: Bool = false
+    @State private var checkUpdateCommand: String = ""
+    @State private var updateCommand: String = ""
+
     // 0: 自定义, 1: Brew, 2: App, 3: Docker
     @State private var selectedTemplate: Int = 0
 
@@ -414,6 +418,89 @@ struct ServiceEditorSheet: View {
 
                     Divider()
 
+                    // 更新与升级
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L("更新与升级", "Update & Upgrade"))
+                            .font(.caption.bold()).foregroundColor(.secondary)
+
+                        HStack {
+                            Text(L("检查更新:", "Check update:")).frame(width: 90, alignment: .trailing)
+                            Toggle(L("启用自动检查更新与一键升级", "Enable update check and upgrade"), isOn: $checkUpdateEnabled)
+                                .onChange(of: checkUpdateEnabled) { enabled in
+                                    if enabled {
+                                        autoFillUpdateCommandsIfNeeded()
+                                    }
+                                }
+                        }
+
+                        if checkUpdateEnabled {
+                            HStack(spacing: 8) {
+                                Text(L("检测命令:", "Check command:")).frame(width: 90, alignment: .trailing)
+                                TextField(L("如 brew outdated xxx 或 git fetch", "e.g. brew outdated xxx or git fetch"), text: $checkUpdateCommand)
+                                    .textFieldStyle(.roundedBorder)
+                                Button(action: {
+                                    if let path = AppPickerHelper.pickFile(title: L("选择检测更新脚本", "Choose Check Script")) {
+                                        checkUpdateCommand = path
+                                    }
+                                }) {
+                                    Text(L("浏览...", "Browse..."))
+                                        .lineLimit(1)
+                                        .fixedSize()
+                                }
+                                .proButton()
+                                .controlSize(.small)
+                                .fixedSize()
+                                .layoutPriority(1)
+                            }
+
+                            HStack(spacing: 8) {
+                                Text(L("更新命令:", "Update command:")).frame(width: 90, alignment: .trailing)
+                                TextField(L("如 brew upgrade xxx 或 git pull", "e.g. brew upgrade xxx or git pull"), text: $updateCommand)
+                                    .textFieldStyle(.roundedBorder)
+                                Button(action: {
+                                    if let path = AppPickerHelper.pickFile(title: L("选择更新升级脚本", "Choose Update Script")) {
+                                        updateCommand = path
+                                    }
+                                }) {
+                                    Text(L("浏览...", "Browse..."))
+                                        .lineLimit(1)
+                                        .fixedSize()
+                                }
+                                .proButton()
+                                .controlSize(.small)
+                                .fixedSize()
+                                .layoutPriority(1)
+                            }
+
+                            HStack(spacing: 6) {
+                                Spacer().frame(width: 90)
+                                Button(action: {
+                                    checkUpdateCommand = "git fetch origin && git status -uno"
+                                    updateCommand = "git pull"
+                                }) {
+                                    Text(L("填充 Git 模板", "Fill Git Template"))
+                                }
+                                .proButton()
+                                .controlSize(.mini)
+
+                                Button(action: {
+                                    checkUpdateCommand = ""
+                                    updateCommand = "docker compose pull && docker compose up -d"
+                                }) {
+                                    Text(L("填充 Compose 模板", "Fill Compose Template"))
+                                }
+                                .proButton()
+                                .controlSize(.mini)
+
+                                Text(L("应用启动及服务拉起后将自动检测，有新版本时将标注状态", "Checked on app/service start. Updates will be highlighted on the service card."))
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
+                    Divider()
+
                     // Cloudflare Tunnel —— 依赖服务主页作为穿透目标，须先配置主页
                     VStack(alignment: .leading, spacing: 8) {
                         Text(L("公网映射 (Cloudflare Tunnel)", "Public URL (Cloudflare Tunnel)"))
@@ -558,7 +645,25 @@ struct ServiceEditorSheet: View {
                     tunnelToken = tc.token ?? ""
                     tunnelTarget = tc.targetURL ?? ""
                 }
+                checkUpdateEnabled = s.checkUpdateEnabled
+                checkUpdateCommand = s.checkUpdateCommand ?? ""
+                updateCommand = s.updateCommand ?? ""
             }
+        }
+    }
+
+    private func autoFillUpdateCommandsIfNeeded() {
+        guard checkUpdateCommand.trimmingCharacters(in: .whitespaces).isEmpty &&
+              updateCommand.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return
+        }
+        let fullCmd = (startCommand + " " + (statusCommand) + " " + (stopCommand)).lowercased()
+        if selectedTemplate == 1 || fullCmd.contains("brew services") {
+            let formula = id.trimmingCharacters(in: .whitespaces).isEmpty ? "<formula>" : id
+            checkUpdateCommand = "/opt/homebrew/bin/brew outdated --verbose \(formula) 2>/dev/null || true"
+            updateCommand = "/opt/homebrew/bin/brew upgrade \(formula)"
+        } else if selectedTemplate == 3 || fullCmd.contains("docker ") || fullCmd.contains("docker-compose") {
+            updateCommand = "docker compose pull && docker compose up -d"
         }
     }
 
@@ -594,6 +699,8 @@ struct ServiceEditorSheet: View {
         startCommand = "/opt/homebrew/bin/brew services run \(trimmed)"
         stopCommand = "/opt/homebrew/bin/brew services stop \(trimmed)"
         statusCommand = "/opt/homebrew/bin/brew services list | grep \"\(trimmed)\" | grep started"
+        checkUpdateCommand = "/opt/homebrew/bin/brew outdated --verbose \(trimmed) 2>/dev/null || true"
+        updateCommand = "/opt/homebrew/bin/brew upgrade \(trimmed)"
     }
 
     private func scanDockerContainers() {
@@ -619,6 +726,8 @@ struct ServiceEditorSheet: View {
         startCommand = "\(dockerPath) start \(trimmed)"
         stopCommand = "\(dockerPath) stop \(trimmed)"
         statusCommand = "\(dockerPath) inspect -f '{{.State.Running}}' \(trimmed) | grep -q \"true\""
+        checkUpdateCommand = ""
+        updateCommand = ""
     }
 
     @MainActor
@@ -688,7 +797,10 @@ struct ServiceEditorSheet: View {
             webURL: webURL.isEmpty ? nil : webURL.trimmingCharacters(in: .whitespacesAndNewlines),
             openWebURLOnStart: openWebURLOnStart,
             tunnelConfig: tc,
-            serviceType: resolvedCategory
+            serviceType: resolvedCategory,
+            checkUpdateEnabled: checkUpdateEnabled,
+            checkUpdateCommand: checkUpdateCommand.isEmpty ? nil : checkUpdateCommand.trimmingCharacters(in: .whitespacesAndNewlines),
+            updateCommand: updateCommand.isEmpty ? nil : updateCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         )
         onSave(service)
         dismiss()

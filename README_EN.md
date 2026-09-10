@@ -112,6 +112,88 @@ In daily software development and local DevOps, developers often manage numerous
     ⚠️ Watch out for two common pitfalls:
     1. **Never rely on implicit return values at the end of a branch** — if the last line of `do_status` is `log "xxx"`, `networksetup ...`, or another external command, the function's exit code follows that command instead of the real service state. Always `exit 0` / `exit 1` explicitly in every branch;
     2. **Beware of `set -e` interference** — with `set -Eeuo pipefail`, any intermediate command failure inside the script (e.g. `grep` missing a match, a missing file) aborts the whole script with a non-zero code, which may conflict with your status semantics. Add `|| true` after intermediate commands in the status path, or keep status-detection logic isolated from the global `set -e` scope.
+- **Update & Check-Update Command Specification**:
+  - **ServiceHub Lifecycle Orchestration**: When triggering "Update & Restart", ServiceHub enforces a safe pipeline: **Gracefully stops old service (releasing ports and files, pausing crash-guard) ➔ Executes update command ➔ Automatically starts/restarts service upon success**. The update script only needs to focus on downloading/replacing the binary without killing or restarting processes manually;
+  - **Check-Update Command Specification**:
+    - **Update Available**: The command exit code must be `0`, and standard output (stdout) must print **non-empty text describing the new version** (e.g. `v2.0.1 (current: v2.0.0)`). The first line of this output is displayed directly on the service card badge and update prompt;
+    - **Already Up to Date**: The command exit code must be `0`, and standard output must be **empty** (or only printed under `--verbose`). ServiceHub detects empty output as up to date and provides feedback when checked manually;
+    - **Check Failure / Error**: Exits with a non-zero code.
+  - **Update Command Specification**:
+    - Responsible for downloading the new program, replacing binaries, pulling git commits, or pulling container images;
+    - **Reliable Exit Codes**: Must return `0` on successful upgrade; must return non-zero on failure (e.g. network timeout, build failure, checksum mismatch). When a failure is detected, ServiceHub **aborts automatic restart** and flags the service with an error to prevent crash loops.
+  - ✅ **Recommended Pattern Examples**:
+    - **Homebrew Service**:
+      - Check command: `/opt/homebrew/bin/brew outdated --verbose <formula> 2>/dev/null || true`
+      - Update command: `/opt/homebrew/bin/brew upgrade <formula>`
+    - **Git-based Repository (e.g. WebUI / Script)**:
+      - Check command: `git fetch origin && git log -1 --oneline HEAD..@{u}` (prints commit if remote has updates, empty if up to date)
+      - Update command: `git pull`
+    - **Docker Compose Service**:
+      - Check command: Run a lightweight metadata-check script (recommended, see sample below), or leave empty to update manually;
+      - Update command: `docker compose pull && docker compose up -d` (⚠️ `up -d` is required; a plain `docker pull` cannot recreate containers with new image layers).
+  - 🐳 **Docker Zero-Bandwidth Metadata Check Specification (Recommended)**:
+    > ⚠️ **Common Pitfall**: Never run `docker pull` in the "Check command", as it downloads multi-gigabyte layers on every check; also do not use the non-existent `--dry-run`.
+    >
+    > ✅ **Best Practice**: Use Docker's built-in `docker buildx imagetools inspect` to fetch remote Registry manifests (consuming only a few KBs of metadata) and compare against the running container's image ID:
+    ```bash
+    # check_docker_update.sh: Check for new remote image via lightweight metadata
+    CONTAINER="vaultwarden"
+    IMAGE="vaultwarden/server:latest"
+
+    CURRENT_ID=$(docker inspect --format '{{.Image}}' "$CONTAINER" 2>/dev/null)
+    ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/arm64/arm64/')
+    REMOTE_DIGEST=$(docker buildx imagetools inspect "$IMAGE" --raw 2>/dev/null | jq -r --arg a "$ARCH" '.manifests[] | select(.platform.architecture == $a and .platform.os == "linux") | .digest' | head -n 1)
+
+    if [ -n "$REMOTE_DIGEST" ]; then
+        REMOTE_ID=$(docker buildx imagetools inspect "${IMAGE%:*}:latest@$REMOTE_DIGEST" --raw 2>/dev/null | jq -r '.config.digest')
+        if [ -n "$REMOTE_ID" ] && [ "$CURRENT_ID" != "$REMOTE_ID" ]; then
+            echo "New image available: ${REMOTE_ID:0:19}..."
+        fi
+    fi
+    exit 0
+    ```
+  - ⚡️ **Concise Check-Update Script Example (`check_update.sh`)**:
+    > Core rule: **Print version info when updates exist (exit code 0), keep stdout completely empty when up to date (exit code 0)**.
+    ```bash
+    #!/usr/bin/env bash
+    CURRENT="v1.0.0"
+    # Fetch latest GitHub Release Tag (tokenless, no rate limit)
+    LATEST=$(curl -sI "https://github.com/owner/repo/releases/latest" 2>/dev/null | grep -i "^location:" | sed -e 's/.*tag\///' -e 's/[[:space:]]//g')
+
+    # Compare versions: print ONLY when a newer version is found
+    if [ -n "$LATEST" ] && [ "$LATEST" != "$CURRENT" ]; then
+        echo "$LATEST (current: $CURRENT)"
+    fi
+    exit 0
+    ```
+  - ⚡️ **Direct Input Field One-liner Example**:
+    ```bash
+    # Suitable for pasting directly into the "Check command" input box:
+    latest=$(curl -sI https://github.com/owner/repo/releases/latest 2>/dev/null | grep -i "^location:" | sed -e 's/.*tag\///' -e 's/[[:space:]]//g') && [ -n "$latest" ] && [ "$latest" != "v1.0.0" ] && echo "$latest (current: v1.0.0)" || true
+    ```
+  - 📋 **Full Service Lifecycle Script Template (`start|stop|check-update|update`)**:
+    ```bash
+    # 1. Check-update branch (check-update)
+    do_check_update() {
+        local current="$(get_local_version)"
+        local latest="$(get_remote_version)"
+        if [ "$current" != "$latest" ]; then
+            echo "$latest (current: $current)"   # ✅ Update found: print info and exit 0
+            exit 0
+        else
+            exit 0                             # ✅ Up to date: stdout empty and exit 0
+        fi
+    }
+
+    # 2. Perform-update branch (update)
+    do_update() {
+        if download_and_replace_bin; then
+            exit 0                             # ✅ Success: exit 0, ServiceHub will restart service
+        else
+            exit 1                             # ✅ Failure: exit non-zero, ServiceHub blocks restart
+        fi
+    }
+    ```
 - **Real-Time Log Streamer**:
   - Lightweight file tail powered by AppKit `DispatchSource`;
   - **Bounded line buffer**: the console keeps only the latest **300 lines** of live logs — memory stays constantly tiny no matter how large the log file grows, and the UI stays perfectly smooth;

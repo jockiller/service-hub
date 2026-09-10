@@ -277,6 +277,12 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var tunnelConfig: TunnelConfig?
     /// 服务所属类别（自定义脚本 / Homebrew / Docker / 应用程序）
     public var serviceType: ServiceCategory?
+    /// 是否开启检查更新功能
+    public var checkUpdateEnabled: Bool
+    /// 检测更新的命令（退出码为 0 且有输出内容视为有新版本）
+    public var checkUpdateCommand: String?
+    /// 执行更新的命令（更新成功后将自动重启服务）
+    public var updateCommand: String?
 
     /// 智能解析服务所属的类别（优先使用显式 serviceType，若历史配置未存则根据命令及路径自动识别）
     public var category: ServiceCategory {
@@ -319,7 +325,10 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         webURL: String? = nil,
         openWebURLOnStart: Bool = false,
         tunnelConfig: TunnelConfig? = nil,
-        serviceType: ServiceCategory? = nil
+        serviceType: ServiceCategory? = nil,
+        checkUpdateEnabled: Bool = false,
+        checkUpdateCommand: String? = nil,
+        updateCommand: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -341,6 +350,9 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.openWebURLOnStart = openWebURLOnStart
         self.tunnelConfig = tunnelConfig
         self.serviceType = serviceType
+        self.checkUpdateEnabled = checkUpdateEnabled
+        self.checkUpdateCommand = checkUpdateCommand
+        self.updateCommand = updateCommand
     }
 
     public init(from decoder: Decoder) throws {
@@ -365,6 +377,9 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.openWebURLOnStart = try container.decodeIfPresent(Bool.self, forKey: .openWebURLOnStart) ?? false
         self.tunnelConfig = try container.decodeIfPresent(TunnelConfig.self, forKey: .tunnelConfig)
         self.serviceType = try container.decodeIfPresent(ServiceCategory.self, forKey: .serviceType)
+        self.checkUpdateEnabled = try container.decodeIfPresent(Bool.self, forKey: .checkUpdateEnabled) ?? false
+        self.checkUpdateCommand = try container.decodeIfPresent(String.self, forKey: .checkUpdateCommand)
+        self.updateCommand = try container.decodeIfPresent(String.self, forKey: .updateCommand)
     }
 }
 

@@ -14,6 +14,8 @@ struct ServiceCardView: View {
 
     @State private var showStopConfirm = false
     @State private var showRestartConfirm = false
+    @State private var showUpdateConfirm = false
+    @State private var showAlreadyLatestAlert = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -42,6 +44,37 @@ struct ServiceCardView: View {
                 }
 
                 Spacer()
+
+                if supervisor.isUpdatingServices[service.id] == true {
+                    HStack(spacing: 4) {
+                        ProgressView().controlSize(.mini)
+                        Text(L("更新中...", "Updating..."))
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(.blue)
+                    }
+                    .padding(.horizontal, 5.5)
+                    .padding(.vertical, 2.5)
+                    .background(Color.blue.opacity(0.12))
+                    .cornerRadius(4.5)
+                } else if supervisor.updatesAvailable[service.id] == true {
+                    Button(action: {
+                        showUpdateConfirm = true
+                    }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                .font(.system(size: 9))
+                            Text(L("可更新", "Update"))
+                                .font(.system(size: 9, weight: .bold))
+                        }
+                        .padding(.horizontal, 5.5)
+                        .padding(.vertical, 2.5)
+                        .background(Color.blue.opacity(0.15))
+                        .foregroundColor(.blue)
+                        .cornerRadius(4.5)
+                    }
+                    .buttonStyle(.plain)
+                    .help(supervisor.updateInfos[service.id] ?? L("有新版本可用，点击立即更新并重启", "New version available, click to update & restart"))
+                }
 
                 if supervisor.isBusy[service.id] == true {
                     ProgressView()
@@ -241,6 +274,40 @@ struct ServiceCardView: View {
                     Button(L("手动刷新状态", "Refresh Status")) {
                         Task { await supervisor.probeService(service) }
                     }
+
+                    if service.checkUpdateEnabled {
+                        Divider()
+                        Button {
+                            Task {
+                                let res = await supervisor.checkUpdate(for: service)
+                                switch res {
+                                case .alreadyUpToDate:
+                                    showAlreadyLatestAlert = true
+                                case .updateAvailable:
+                                    showUpdateConfirm = true
+                                case .failed:
+                                    break
+                                }
+                            }
+                        } label: {
+                            if supervisor.isCheckingUpdates[service.id] == true {
+                                Label(L("正在检测更新...", "Checking for updates..."), systemImage: "arrow.clockwise")
+                            } else {
+                                Label(L("检查更新", "Check for Updates"), systemImage: "arrow.clockwise")
+                            }
+                        }
+                        .disabled(supervisor.isCheckingUpdates[service.id] == true || supervisor.isUpdatingServices[service.id] == true)
+
+                        if supervisor.updatesAvailable[service.id] == true || (service.updateCommand != nil && !service.updateCommand!.isEmpty) {
+                            Button {
+                                showUpdateConfirm = true
+                            } label: {
+                                Label(L("立即更新并重启", "Update and Restart"), systemImage: "arrow.triangle.2.circlepath")
+                            }
+                            .disabled(supervisor.isUpdatingServices[service.id] == true)
+                        }
+                    }
+
                     Divider()
                     Button(L("删除服务", "Delete Service"), role: .destructive) {
                         onDelete()
@@ -277,6 +344,23 @@ struct ServiceCardView: View {
             }
         } message: {
             Text(L("重启期间服务将短暂不可用，随后将自动重新启动。", "The service will be temporarily interrupted, then automatically restarted."))
+        }
+        .alert(L("已是最新版本", "Already Up to Date"), isPresented: $showAlreadyLatestAlert) {
+            Button(L("确定", "OK"), role: .cancel) {}
+        } message: {
+            Text(L("服务「\(service.name)」当前已是最新版本，无需更新。", "Service \"\(service.name)\" is already up to date."))
+        }
+        .alert(L("确定更新服务「\(service.name)」吗？", "Update service \"\(service.name)\"?"), isPresented: $showUpdateConfirm) {
+            Button(L("取消", "Cancel"), role: .cancel) {}
+            Button(L("立即更新并重启", "Update & Restart")) {
+                Task { await supervisor.performUpdate(for: service) }
+            }
+        } message: {
+            if let info = supervisor.updateInfos[service.id], !info.isEmpty {
+                Text(L("检测到更新内容: \(info)\n更新完成后将自动重启该服务。", "Detected update: \(info)\nThe service will be restarted automatically."))
+            } else {
+                Text(L("更新完成后将自动重启该服务。", "The service will be restarted automatically after updating."))
+            }
         }
     }
 
