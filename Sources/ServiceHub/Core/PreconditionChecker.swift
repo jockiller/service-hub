@@ -28,7 +28,9 @@ public final class PreconditionChecker {
         case .networkConnected:
             let cmd = "curl -sI -m 2 https://captive.apple.com/hotspot-detect.html >/dev/null 2>&1 || ping -c 1 -t 2 223.5.5.5 >/dev/null 2>&1"
             let res = await ProcessRunner.run(command: cmd, timeout: 3)
-            return res.isSuccess ? (true, L("互联网已连通", "Internet connected")) : (false, L("等待外网连接", "Waiting for internet"))
+            let isOk = res.isSuccess
+            AppLogger.log("[Precondition] 检查服务「\(service.name)」网络连通性: \(isOk ? "已连通" : "未连通 (curl/ping 均未响应)")")
+            return isOk ? (true, L("互联网已连通", "Internet connected")) : (false, L("等待外网连接", "Waiting for internet"))
 
         case .networkDisconnected:
             let cmd = "curl -sI -m 2 https://captive.apple.com/hotspot-detect.html >/dev/null 2>&1 || ping -c 1 -t 2 223.5.5.5 >/dev/null 2>&1"

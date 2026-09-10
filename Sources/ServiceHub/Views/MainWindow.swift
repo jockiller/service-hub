@@ -371,6 +371,9 @@ struct MainWindow: View {
                     Button(L("在访达中定位配置文件 (services.yaml)", "Reveal services.yaml in Finder")) {
                         NSWorkspace.shared.activateFileViewerSelecting([store.configURL])
                     }
+                    Button(L("在访达中定位应用日志 (servicehub.log)", "Reveal servicehub.log in Finder")) {
+                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: AppLogger.logFilePath)])
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }

@@ -2,6 +2,20 @@ import SwiftUI
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        AppLogger.log("[App] ServiceHub 进程启动就绪 (PID: \(pid))，日志写入: \(AppLogger.logFilePath)")
+
+        Task { @MainActor in
+            // 等待系统环境与首轮配置就绪，确保开机自启无论窗口是否显示均必定执行
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            Supervisor.shared.launchServicesAtStartup()
+
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            Supervisor.shared.checkUpdatesForAllServices()
+        }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
     }
@@ -56,15 +70,6 @@ struct ServiceHubApp: App {
         // 主程序窗口
         WindowGroup("ServiceHub", id: "main") {
             MainWindow()
-                .task {
-                    // 应用启动后延迟拉起勾选了「随 ServiceHub 启动」的服务
-                    try? await Task.sleep(nanoseconds: 500_000_000)
-                    Supervisor.shared.launchServicesAtStartup()
-
-                    // 应用启动后延迟 3 秒，在后台对勾选了检查更新的服务执行一次更新检测
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    Supervisor.shared.checkUpdatesForAllServices()
-                }
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)

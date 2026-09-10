@@ -4,7 +4,7 @@ set -e
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$DIR"
 
-VERSION="${1:-1.7.2}"
+VERSION="${1:-1.7.3}"
 APP_NAME="ServiceHub"
 BUILD_DIR="$DIR/build"
 APP_BUNDLE="$BUILD_DIR/${APP_NAME}.app"

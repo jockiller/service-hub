@@ -51,6 +51,7 @@ public final class Supervisor: ObservableObject {
     /// 启动定时后台探测循环
     public func startProbeLoop() {
         probeTimer?.invalidate()
+        AppLogger.log("[Supervisor] 探活循环已就绪，周期 6.0s")
         probeTimer = Timer.scheduledTimer(withTimeInterval: 6.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.triggerProbeAll()
@@ -95,8 +96,18 @@ public final class Supervisor: ObservableObject {
             return
         }
 
+        let isPendingLaunch = pendingStartupLaunch.contains(service.id)
+
         // 1. 探活结果为 running：正常更新运行数据
         if res.status == .running {
+            if isPendingLaunch {
+                pendingStartupLaunch.remove(service.id)
+                AppLogger.log("[Supervisor] [开机待拉起] 服务「\(service.name)」检测到当前已在运行 (PID: \(res.pid ?? 0))，已认领纳入守护")
+            }
+            let prevStatus = self.statuses[service.id]
+            if prevStatus != .running {
+                AppLogger.log("[Supervisor] 服务「\(service.name)」状态就绪: running (PID: \(res.pid ?? 0))")
+            }
             let prevRuntime = self.runtimes[service.id]
             self.statuses[service.id] = .running
 
@@ -173,31 +184,26 @@ public final class Supervisor: ObservableObject {
         }
 
         // 2. 探活未运行（.stopped / .unknown / .failed），进入拉起决策分支
-        let isPendingLaunch = pendingStartupLaunch.contains(service.id)
-
         // 2a. 【应用启动待拉起】pending 标记优先消费：
         //     前置条件满足 → 拉起并消费标记；未满足 → 标记等待态，下轮继续复查
         if isPendingLaunch {
             Task { [weak self] in
                 guard let self = self else { return }
-                // 双重确认：期间可能已被用户手动处理或已启动
                 guard self.pendingStartupLaunch.contains(service.id),
                       self.statuses[service.id] != .running,
                       self.isBusy[service.id] != true else { return }
 
+                AppLogger.log("[Supervisor] [开机待拉起] 检测服务「\(service.name)」(ID: \(service.id)) 前置条件 (\(service.precondition.displayName))...")
                 let preCheck = await PreconditionChecker.check(service: service)
-                // 复查期间状态可能再次变化（如用户手动停止），再次确认
                 guard self.pendingStartupLaunch.contains(service.id),
                       self.statuses[service.id] != .running,
                       self.isBusy[service.id] != true else { return }
 
                 if preCheck.isSatisfied {
-                    print("[Supervisor] 服务 \(service.name) 前置条件已满足，自动拉起 (应用启动待拉起队列)...")
-                    // startService 成功后由其内部消费 pending 标记
+                    AppLogger.log("[Supervisor] [开机待拉起] 服务「\(service.name)」前置条件已满足，准备执行启动...")
                     await self.startService(service)
                 } else {
-                    print("[Supervisor] 服务 \(service.name) 前置条件未满足，继续等待: \(preCheck.reason)")
-                    // 标记等待前置条件状态并显示原因（下轮探活继续复查）
+                    AppLogger.log("[Supervisor] [开机待拉起] 服务「\(service.name)」前置条件未满足: \(preCheck.reason)，保持等待...")
                     self.statuses[service.id] = .waitingPrecondition
                     self.runtimes[service.id] = ServiceRuntimeInfo(
                         status: .waitingPrecondition,
@@ -274,11 +280,11 @@ public final class Supervisor: ObservableObject {
                         uptime: failReason
                     )
                     lastOutputs[service.id] = L("服务在 \(service.restartWindowSeconds) 秒内连续重启达到 \(service.maxRestarts) 次上限，已暂停自动保活保护系统。请排查原因后手动点击启动恢复。", "Service restarted \(service.maxRestarts) time(s) within \(service.restartWindowSeconds)s; auto keep-alive paused. Investigate and start manually to resume.")
-                    print("[-] [Supervisor] 服务 \(service.name) \(failReason)")
+                    AppLogger.log("[-] [Supervisor] 服务「\(service.name)」\(failReason)")
                 } else {
                     history.append(now)
                     restartTimestamps[service.id] = history
-                    print("[Supervisor] 检测到服务 \(service.name) 异常退出，正在自动重拉 (\(service.restartWindowSeconds)s内第 \(history.count)/\(service.maxRestarts) 次)...")
+                    AppLogger.log("[Supervisor] 检测到服务「\(service.name)」异常退出，正在自动重拉 (\(service.restartWindowSeconds)s内第 \(history.count)/\(service.maxRestarts) 次)...")
                     Task {
                         await startService(service)
                     }
@@ -292,10 +298,14 @@ public final class Supervisor: ObservableObject {
     /// 这样网络未就绪时服务会安静地每轮复查，网络一通立即自动启动，无需独立拉起路线。
     public func launchServicesAtStartup() {
         let services = ServiceStore.shared.services
-        let ids = services.filter { $0.launchOnAppStart }.map { $0.id }
-        guard !ids.isEmpty else { return }
+        let startupServices = services.filter { $0.launchOnAppStart }
+        let ids = startupServices.map { $0.id }
+        guard !ids.isEmpty else {
+            AppLogger.log("[Supervisor] launchServicesAtStartup(): 当前配置文件中无任何服务勾选「随应用启动」")
+            return
+        }
         pendingStartupLaunch.formUnion(ids)
-        print("[Supervisor] 应用启动：登记 \(ids.count) 个待拉起服务，交由探活循环按前置条件就绪情况消费")
+        AppLogger.log("[Supervisor] launchServicesAtStartup(): 成功登记 \(ids.count) 个待拉起服务: [\(startupServices.map { "\($0.name)(\($0.id))" }.joined(separator: ", "))]，已交由探活循环统一按前置条件调度拉起")
     }
 
     /// 启动单个服务
@@ -308,7 +318,7 @@ public final class Supervisor: ObservableObject {
         // 1. 启动前先检查前置条件（如：是否已连入外网/Wi-Fi）
         let preCheck = await PreconditionChecker.check(service: service)
         if !preCheck.isSatisfied {
-            print("[Supervisor] 服务 \(service.name) 启动前置条件未满足: \(preCheck.reason)")
+            AppLogger.log("[Supervisor] 服务「\(service.name)」启动前置条件未满足: \(preCheck.reason)")
             statuses[service.id] = .waitingPrecondition
             runtimes[service.id] = ServiceRuntimeInfo(
                 status: .waitingPrecondition,
@@ -323,8 +333,11 @@ public final class Supervisor: ObservableObject {
         statuses[service.id] = .starting
         runtimes[service.id]?.status = .starting
 
+        AppLogger.log("[Supervisor] 开始执行启动服务「\(service.name)」(ID: \(service.id)) 命令: \(service.startCommand)")
         let result = await ProcessRunner.run(command: service.startCommand, timeout: 30)
         lastOutputs[service.id] = result.output
+        let outputSnippet = result.output.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ⏎ ")
+        AppLogger.log("[Supervisor] 服务「\(service.name)」启动命令执行完毕 (退出码: \(result.exitCode)，输出: \(outputSnippet.isEmpty ? "(无输出)" : outputSnippet))")
 
         // 启动后等待 1 秒，让进程稳定，然后探活
         try? await Task.sleep(nanoseconds: 1_000_000_000)
@@ -333,6 +346,7 @@ public final class Supervisor: ObservableObject {
         statuses[service.id] = finalStatus
         let effectivePid = probeRes.pid ?? runtimes[service.id]?.pid
         let effectiveUptime = probeRes.uptimeString ?? runtimes[service.id]?.uptime
+        AppLogger.log("[Supervisor] 服务「\(service.name)」启动后探活结果: \(finalStatus.rawValue) (PID: \(effectivePid != nil ? "\(effectivePid!)" : "无"))")
         runtimes[service.id] = ServiceRuntimeInfo(
             status: finalStatus,
             pid: finalStatus == .running ? effectivePid : nil,

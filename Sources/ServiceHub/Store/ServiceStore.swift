@@ -35,11 +35,13 @@ public final class ServiceStore: ObservableObject {
     public func load() {
         let currentURL = self.configURL
         if !fileManager.fileExists(atPath: currentURL.path) {
-            // 若当前文件不存在，如果处于默认路径则初始化预设，否则保存当前列表
+            // 若当前文件不存在：仅在处于本地默认路径时初始化预设，云端路径（如 OneDrive/iCloud）可能开机短时未挂载，切勿覆写空数据
             if currentURL == defaultConfigURL {
                 self.services = defaultServices()
+                save()
+            } else {
+                AppLogger.log("[ServiceStore] 自定义配置文件暂不可访问或未就绪: \(currentURL.path)，保留现有服务配置")
             }
-            save()
             return
         }
 
@@ -48,8 +50,9 @@ public final class ServiceStore: ObservableObject {
             let decoder = YAMLDecoder()
             let config = try decoder.decode(ServiceConfigFile.self, from: data)
             self.services = config.services
+            AppLogger.log("[ServiceStore] 成功加载配置文件 (\(config.services.count) 个服务): \(currentURL.path)")
         } catch {
-            print("[-] 加载配置文件失败: \(error.localizedDescription)")
+            AppLogger.log("[-] 加载配置文件失败: \(error.localizedDescription)")
         }
     }
 
