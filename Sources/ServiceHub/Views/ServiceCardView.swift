@@ -4,6 +4,7 @@ import SwiftUI
 struct ServiceCardView: View {
     let service: Service
     let isSelected: Bool
+    var isDraggable: Bool = true
     let onSelect: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
@@ -20,21 +21,23 @@ struct ServiceCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             // 头部：左侧[图标 + 大名称/小ID]  右侧[状态Badge]
-            HStack(alignment: .center, spacing: 10) {
-                ServiceIconView(service: service, size: 34)
+            HStack(alignment: .center, spacing: 8) {
+                ServiceIconView(service: service, size: 30)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(service.name)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 13.5, weight: .bold))
                         .lineLimit(1)
 
-                    HStack(spacing: 5) {
+                    HStack(spacing: 4.5) {
                         Text(service.category.shortName)
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundColor(service.category.color)
-                            .padding(.horizontal, 4.5)
+                            .lineLimit(1)
+                            .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(service.category.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3.5))
+                            .fixedSize()
 
                         Text(service.id)
                             .font(.system(size: 10, design: .monospaced))
@@ -43,58 +46,75 @@ struct ServiceCardView: View {
                     }
                 }
 
-                Spacer()
+                Spacer(minLength: 4)
 
-                if supervisor.isUpdatingServices[service.id] == true {
-                    HStack(spacing: 4) {
-                        ProgressView().controlSize(.mini)
-                        Text(L("更新中...", "Updating..."))
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(.blue)
-                    }
-                    .padding(.horizontal, 5.5)
-                    .padding(.vertical, 2.5)
-                    .background(Color.blue.opacity(0.12))
-                    .cornerRadius(4.5)
-                } else if supervisor.updatesAvailable[service.id] == true {
-                    Button(action: {
-                        showUpdateConfirm = true
-                    }) {
+                // 右侧状态与操作区（固定不被压缩换行）
+                HStack(spacing: 5) {
+                    if supervisor.isUpdatingServices[service.id] == true {
                         HStack(spacing: 3) {
-                            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                                .font(.system(size: 9))
-                            Text(L("可更新", "Update"))
-                                .font(.system(size: 9, weight: .bold))
+                            ProgressView().controlSize(.mini)
+                            Text(L("更新中...", "Updating..."))
+                                .font(.system(size: 8.5, weight: .semibold))
+                                .foregroundColor(.blue)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.12))
+                        .cornerRadius(4)
+                        .fixedSize()
+                    } else if supervisor.updatesAvailable[service.id] == true {
+                        Button(action: {
+                            showUpdateConfirm = true
+                        }) {
+                            HStack(spacing: 2.5) {
+                                Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                    .font(.system(size: 8.5))
+                                Text(L("可更新", "Update"))
+                                    .font(.system(size: 8.5, weight: .bold))
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.15))
+                            .foregroundColor(.blue)
+                            .cornerRadius(4)
+                            .fixedSize()
+                        }
+                        .buttonStyle(.plain)
+                        .help(supervisor.updateInfos[service.id] ?? L("有新版本可用，点击立即更新并重启", "New version available, click to update & restart"))
+                    }
+
+                    if supervisor.isBusy[service.id] == true {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        HStack(spacing: 4) {
+                            StatusDotView(color: currentStatus.color, size: 6)
+                            Text(currentStatus.displayName)
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundColor(currentStatus.color)
+                                .lineLimit(1)
                         }
                         .padding(.horizontal, 5.5)
-                        .padding(.vertical, 2.5)
-                        .background(Color.blue.opacity(0.15))
-                        .foregroundColor(.blue)
-                        .cornerRadius(4.5)
+                        .padding(.vertical, 2)
+                        .background(currentStatus.color.opacity(0.1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .strokeBorder(currentStatus.color.opacity(0.22), lineWidth: 0.5)
+                        )
+                        .cornerRadius(4)
+                        .fixedSize()
                     }
-                    .buttonStyle(.plain)
-                    .help(supervisor.updateInfos[service.id] ?? L("有新版本可用，点击立即更新并重启", "New version available, click to update & restart"))
-                }
 
-                if supervisor.isBusy[service.id] == true {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    HStack(spacing: 4.5) {
-                        StatusDotView(color: currentStatus.color, size: 6.5)
-                        Text(currentStatus.displayName)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(currentStatus.color)
+                    if isDraggable {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundColor(.secondary.opacity(0.35))
+                            .help(L("拖拽可调整卡片顺序或跨组移动", "Drag to reorder or move to another group"))
                     }
-                    .padding(.horizontal, 6.5)
-                    .padding(.vertical, 2.5)
-                    .background(currentStatus.color.opacity(0.1))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4.5)
-                            .strokeBorder(currentStatus.color.opacity(0.22), lineWidth: 0.5)
-                    )
-                    .cornerRadius(4.5)
                 }
+                .fixedSize(horizontal: true, vertical: false)
             }
 
             // 中部指标：公网竖条、PID、运行时长、熔断提示、前置条件标签
@@ -275,6 +295,10 @@ struct ServiceCardView: View {
                         Task { await supervisor.probeService(service) }
                     }
 
+                    Divider()
+
+                    moveToGroupMenu
+
                     if service.checkUpdateEnabled {
                         Divider()
                         Button {
@@ -326,8 +350,12 @@ struct ServiceCardView: View {
         // Raycast / Linear 风格精密专业卡片
         .proCard(statusColor: currentStatus.color, isSelected: isSelected, cornerRadius: ProTheme.cornerRadiusCard)
         .contentShape(RoundedRectangle(cornerRadius: ProTheme.cornerRadiusCard))
+        .modifier(OptionalCardDraggable(id: service.id, enabled: isDraggable, service: service))
         .onTapGesture {
             onSelect()
+        }
+        .contextMenu {
+            cardContextMenu
         }
         .alert(L("确定关闭服务「\(service.name)」吗？", "Stop service \"\(service.name)\"?"), isPresented: $showStopConfirm) {
             Button(L("取消", "Cancel"), role: .cancel) {}
@@ -381,6 +409,112 @@ struct ServiceCardView: View {
             tunnelManager.stopTunnel(for: service.id)
         } else {
             tunnelManager.startTunnel(for: service)
+        }
+    }
+
+    @ViewBuilder
+    private var moveToGroupMenu: some View {
+        Menu(L("移至分组", "Move to Group")) {
+            Button(action: {
+                ServiceStore.shared.setServiceGroup(serviceId: service.id, groupId: nil)
+            }) {
+                HStack {
+                    Text(L("未分组", "Ungrouped"))
+                    if service.groupId == nil {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+            if !ServiceStore.shared.groups.isEmpty {
+                Divider()
+                ForEach(ServiceStore.shared.groups) { g in
+                    Button(action: {
+                        ServiceStore.shared.setServiceGroup(serviceId: service.id, groupId: g.id)
+                    }) {
+                        HStack {
+                            Text(g.name)
+                            if service.groupId == g.id {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var cardContextMenu: some View {
+        if currentStatus == .running {
+            Button(L("停止服务", "Stop Service")) {
+                showStopConfirm = true
+            }
+            Button(L("重启服务", "Restart")) {
+                showRestartConfirm = true
+            }
+        } else {
+            Button(L("启动服务", "Start Service")) {
+                Task { await supervisor.startService(service) }
+            }
+        }
+
+        Divider()
+
+        moveToGroupMenu
+
+        Divider()
+
+        if let webStr = service.webURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !webStr.isEmpty,
+           let url = URL(string: webStr) {
+            Button(L("打开服务主页", "Open Homepage")) {
+                NSWorkspace.shared.open(url)
+            }
+        }
+
+        Button(L("编辑服务配置...", "Edit Service...")) {
+            onEdit()
+        }
+
+        Button(L("手动刷新状态", "Refresh Status")) {
+            Task { await supervisor.probeService(service) }
+        }
+
+        Divider()
+
+        Button(L("删除服务", "Delete Service"), role: .destructive) {
+            onDelete()
+        }
+    }
+}
+
+// MARK: - 可选拖拽修饰器
+private struct OptionalCardDraggable: ViewModifier {
+    let id: String
+    let enabled: Bool
+    let service: Service
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.draggable(id) {
+                HStack(spacing: 8) {
+                    ServiceIconView(service: service, size: 24)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(service.name)
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(service.id)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color(NSColor.windowBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor.opacity(0.5), lineWidth: 1))
+                .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 3)
+            }
+        } else {
+            content
         }
     }
 }

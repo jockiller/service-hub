@@ -6,6 +6,7 @@ public final class ServiceStore: ObservableObject {
     public static let shared = ServiceStore()
 
     @Published public var services: [Service] = []
+    @Published public var groups: [ServiceGroup] = []
     @Published public var selectedServiceId: String?
 
     private let fileManager = FileManager.default
@@ -49,8 +50,9 @@ public final class ServiceStore: ObservableObject {
             let data = try Data(contentsOf: currentURL)
             let decoder = YAMLDecoder()
             let config = try decoder.decode(ServiceConfigFile.self, from: data)
+            self.groups = config.groups.sorted(by: { $0.order < $1.order })
             self.services = config.services
-            AppLogger.log("[ServiceStore] 成功加载配置文件 (\(config.services.count) 个服务): \(currentURL.path)")
+            AppLogger.log("[ServiceStore] 成功加载配置文件 (\(config.groups.count) 个分组, \(config.services.count) 个服务): \(currentURL.path)")
         } catch {
             AppLogger.log("[-] 加载配置文件失败: \(error.localizedDescription)")
         }
@@ -63,7 +65,7 @@ public final class ServiceStore: ObservableObject {
             try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         }
 
-        let config = ServiceConfigFile(version: 1, services: services)
+        let config = ServiceConfigFile(version: 2, groups: groups, services: services)
         do {
             let encoder = YAMLEncoder()
             let yamlString = try encoder.encode(config)
@@ -81,7 +83,7 @@ public final class ServiceStore: ObservableObject {
         }
 
         if migrateExisting {
-            let config = ServiceConfigFile(version: 1, services: services)
+            let config = ServiceConfigFile(version: 2, groups: groups, services: services)
             let encoder = YAMLEncoder()
             let yamlString = try encoder.encode(config)
             try yamlString.write(to: newURL, atomically: true, encoding: .utf8)
@@ -130,7 +132,103 @@ public final class ServiceStore: ObservableObject {
         let data = try Data(contentsOf: sourceURL)
         let decoder = YAMLDecoder()
         let config = try decoder.decode(ServiceConfigFile.self, from: data)
+        self.groups = config.groups.sorted(by: { $0.order < $1.order })
         self.services = config.services
+        save()
+    }
+
+    // MARK: - Group Management
+
+    public func addGroup(_ group: ServiceGroup) {
+        var newGroup = group
+        if newGroup.order == 0 && !groups.isEmpty {
+            newGroup.order = (groups.map(\.order).max() ?? 0) + 1
+        }
+        groups.removeAll(where: { $0.id == newGroup.id })
+        groups.append(newGroup)
+        groups.sort(by: { $0.order < $1.order })
+        save()
+    }
+
+    public func updateGroup(_ group: ServiceGroup) {
+        if let idx = groups.firstIndex(where: { $0.id == group.id }) {
+            groups[idx] = group
+            groups.sort(by: { $0.order < $1.order })
+            save()
+        }
+    }
+
+    public func deleteGroup(id: String) {
+        groups.removeAll(where: { $0.id == id })
+        for i in 0..<services.count {
+            if services[i].groupId == id {
+                services[i].groupId = nil
+            }
+        }
+        save()
+    }
+
+    public func toggleGroupCollapse(id: String) {
+        if let idx = groups.firstIndex(where: { $0.id == id }) {
+            groups[idx].isCollapsed.toggle()
+            save()
+        }
+    }
+
+    public func moveGroup(fromOffsets: IndexSet, toOffset: Int) {
+        groups.move(fromOffsets: fromOffsets, toOffset: toOffset)
+        for i in 0..<groups.count {
+            groups[i].order = i
+        }
+        save()
+    }
+
+    // MARK: - Service Reordering & Group Assignment
+
+    public func setServiceGroup(serviceId: String, groupId: String?) {
+        guard let idx = services.firstIndex(where: { $0.id == serviceId }) else { return }
+        services[idx].groupId = groupId
+        save()
+    }
+
+    /// 将某个服务移动到指定分组以及目标位置（拖拽排序）
+    public func moveService(
+        serviceId: String,
+        toGroupId: String?,
+        targetServiceId: String? = nil
+    ) {
+        guard let sourceIndex = services.firstIndex(where: { $0.id == serviceId }) else { return }
+        let sourceGroupId = services[sourceIndex].groupId
+
+        if let targetId = targetServiceId, let originalTargetIndex = services.firstIndex(where: { $0.id == targetId }) {
+            guard sourceIndex != originalTargetIndex else { return }
+
+            var movedService = services.remove(at: sourceIndex)
+            movedService.groupId = toGroupId
+
+            if let currentTargetIndex = services.firstIndex(where: { $0.id == targetId }) {
+                if sourceGroupId == toGroupId && sourceIndex < originalTargetIndex {
+                    // 同组内从前向后拖动：插入到目标卡片之后
+                    services.insert(movedService, at: min(currentTargetIndex + 1, services.count))
+                } else {
+                    // 同组内从后向前拖动，或跨组拖动：插入到目标卡片当前位置
+                    services.insert(movedService, at: currentTargetIndex)
+                }
+            } else {
+                services.append(movedService)
+            }
+        } else {
+            // 没有具体卡片目标（如拖到空分组占位区）
+            var movedService = services.remove(at: sourceIndex)
+            movedService.groupId = toGroupId
+
+            let groupServices = services.enumerated().filter { $0.element.groupId == toGroupId }
+            if let lastGroupItem = groupServices.last {
+                services.insert(movedService, at: lastGroupItem.offset + 1)
+            } else {
+                services.append(movedService)
+            }
+        }
         save()
     }
 

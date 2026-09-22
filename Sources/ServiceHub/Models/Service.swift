@@ -283,6 +283,8 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var checkUpdateCommand: String?
     /// 执行更新的命令（更新成功后将自动重启服务）
     public var updateCommand: String?
+    /// 所属自定义分组 ID（nil 表示未分组）
+    public var groupId: String?
 
     /// 智能解析服务所属的类别（优先使用显式 serviceType，若历史配置未存则根据命令及路径自动识别）
     public var category: ServiceCategory {
@@ -328,7 +330,8 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         serviceType: ServiceCategory? = nil,
         checkUpdateEnabled: Bool = false,
         checkUpdateCommand: String? = nil,
-        updateCommand: String? = nil
+        updateCommand: String? = nil,
+        groupId: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -353,6 +356,7 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.checkUpdateEnabled = checkUpdateEnabled
         self.checkUpdateCommand = checkUpdateCommand
         self.updateCommand = updateCommand
+        self.groupId = groupId
     }
 
     public init(from decoder: Decoder) throws {
@@ -380,15 +384,25 @@ public struct Service: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.checkUpdateEnabled = try container.decodeIfPresent(Bool.self, forKey: .checkUpdateEnabled) ?? false
         self.checkUpdateCommand = try container.decodeIfPresent(String.self, forKey: .checkUpdateCommand)
         self.updateCommand = try container.decodeIfPresent(String.self, forKey: .updateCommand)
+        self.groupId = try container.decodeIfPresent(String.self, forKey: .groupId)
     }
 }
 
 public struct ServiceConfigFile: Codable {
     public var version: Int
+    public var groups: [ServiceGroup]
     public var services: [Service]
 
-    public init(version: Int = 1, services: [Service] = []) {
+    public init(version: Int = 2, groups: [ServiceGroup] = [], services: [Service] = []) {
         self.version = version
+        self.groups = groups
         self.services = services
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        self.groups = try container.decodeIfPresent([ServiceGroup].self, forKey: .groups) ?? []
+        self.services = try container.decodeIfPresent([Service].self, forKey: .services) ?? []
     }
 }

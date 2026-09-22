@@ -36,6 +36,7 @@ struct ServiceEditorSheet: View {
     @State private var checkUpdateEnabled: Bool = false
     @State private var checkUpdateCommand: String = ""
     @State private var updateCommand: String = ""
+    @State private var selectedGroupId: String = ""
 
     // 0: 自定义, 1: Brew, 2: App, 3: Docker
     @State private var selectedTemplate: Int = 0
@@ -219,6 +220,20 @@ struct ServiceEditorSheet: View {
                                 }
                                 .frame(maxWidth: 180)
                             }
+                        }
+
+                        HStack {
+                            Text(L("所属分组:", "Group:")).frame(width: 90, alignment: .trailing)
+                            Picker("", selection: $selectedGroupId) {
+                                Text(L("未分组", "Ungrouped")).tag("")
+                                if !ServiceStore.shared.groups.isEmpty {
+                                    Divider()
+                                    ForEach(ServiceStore.shared.groups) { g in
+                                        Label(g.name, systemImage: g.icon.isEmpty ? "folder" : g.icon).tag(g.id)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: 200)
                         }
 
                         HStack {
@@ -648,6 +663,7 @@ struct ServiceEditorSheet: View {
                 checkUpdateEnabled = s.checkUpdateEnabled
                 checkUpdateCommand = s.checkUpdateCommand ?? ""
                 updateCommand = s.updateCommand ?? ""
+                selectedGroupId = s.groupId ?? ""
             }
         }
     }
@@ -800,7 +816,8 @@ struct ServiceEditorSheet: View {
             serviceType: resolvedCategory,
             checkUpdateEnabled: checkUpdateEnabled,
             checkUpdateCommand: checkUpdateCommand.isEmpty ? nil : checkUpdateCommand.trimmingCharacters(in: .whitespacesAndNewlines),
-            updateCommand: updateCommand.isEmpty ? nil : updateCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+            updateCommand: updateCommand.isEmpty ? nil : updateCommand.trimmingCharacters(in: .whitespacesAndNewlines),
+            groupId: selectedGroupId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : selectedGroupId.trimmingCharacters(in: .whitespacesAndNewlines)
         )
         onSave(service)
         dismiss()

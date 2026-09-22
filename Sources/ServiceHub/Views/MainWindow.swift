@@ -50,9 +50,15 @@ struct MainWindow: View {
     @State private var isLogCollapsed: Bool = false
 
     @State private var showAddSheet = false
+    @State private var showAddGroupSheet = false
     @State private var showSettings = false
     @State private var serviceToEdit: Service? = nil
     @State private var serviceToDelete: Service? = nil
+    @State private var groupToEdit: ServiceGroup? = nil
+    @State private var groupToDelete: ServiceGroup? = nil
+    @State private var isUngroupedCollapsed: Bool = false
+    @State private var targetedDropServiceId: String? = nil
+    @State private var targetedDropGroupId: String? = nil
 
     @State private var alertMessage: String? = nil
     @State private var showAlert = false
@@ -165,25 +171,207 @@ struct MainWindow: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     if viewMode == .card {
-                        ScrollView {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 270, maximum: 340), spacing: 14)], spacing: 14) {
-                                ForEach(filteredServices) { s in
-                                    ServiceCardView(
-                                        service: s,
-                                        isSelected: store.selectedServiceId == s.id,
-                                        onSelect: {
-                                            store.selectedServiceId = s.id
-                                        },
-                                        onEdit: {
-                                            serviceToEdit = s
-                                        },
-                                        onDelete: {
-                                            serviceToDelete = s
+                        if store.groups.isEmpty {
+                            ScrollView {
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 235, maximum: 280), spacing: 12)], spacing: 14) {
+                                    ForEach(filteredServices) { s in
+                                        ServiceCardView(
+                                            service: s,
+                                            isSelected: store.selectedServiceId == s.id,
+                                            isDraggable: isReorderingAllowed,
+                                            onSelect: {
+                                                store.selectedServiceId = s.id
+                                            },
+                                            onEdit: {
+                                                serviceToEdit = s
+                                            },
+                                            onDelete: {
+                                                serviceToDelete = s
+                                            }
+                                        )
+                                        .overlay(
+                                            targetedDropServiceId == s.id
+                                                ? RoundedRectangle(cornerRadius: ProTheme.cornerRadiusCard)
+                                                    .strokeBorder(Color.accentColor, lineWidth: 2)
+                                                : nil
+                                        )
+                                        .dropDestination(for: String.self) { items, _ in
+                                            guard isReorderingAllowed, let draggedId = items.first, draggedId != s.id else { return false }
+                                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                                store.moveService(serviceId: draggedId, toGroupId: nil, targetServiceId: s.id)
+                                            }
+                                            return true
+                                        } isTargeted: { targeted in
+                                            if isReorderingAllowed {
+                                                targetedDropServiceId = targeted ? s.id : nil
+                                            }
                                         }
-                                    )
+                                    }
                                 }
+                                .padding(16)
                             }
-                            .padding(16)
+                        } else {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 16) {
+                                    ForEach(store.groups) { group in
+                                        let groupServices = filteredServices.filter { $0.groupId == group.id }
+                                        if !groupServices.isEmpty || (filter == .all && searchText.isEmpty) {
+                                            VStack(alignment: .leading, spacing: 8) {
+                                                GroupHeaderView(
+                                                    group: group,
+                                                    services: groupServices,
+                                                    isCollapsed: group.isCollapsed,
+                                                    onToggleCollapse: {
+                                                        store.toggleGroupCollapse(id: group.id)
+                                                    },
+                                                    onEditGroup: {
+                                                        groupToEdit = group
+                                                    },
+                                                    onDeleteGroup: {
+                                                        groupToDelete = group
+                                                    }
+                                                )
+
+                                                if !group.isCollapsed {
+                                                    if groupServices.isEmpty {
+                                                        ZStack {
+                                                            RoundedRectangle(cornerRadius: 10)
+                                                                .strokeBorder(
+                                                                    targetedDropGroupId == group.id ? Color.accentColor : Color.secondary.opacity(0.2),
+                                                                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
+                                                                )
+                                                                .background(
+                                                                    targetedDropGroupId == group.id ? Color.accentColor.opacity(0.06) : Color.clear,
+                                                                    in: RoundedRectangle(cornerRadius: 10)
+                                                                )
+                                                                .frame(height: 64)
+
+                                                            HStack(spacing: 6) {
+                                                                Image(systemName: "plus.circle")
+                                                                    .font(.system(size: 13))
+                                                                Text(L("拖拽卡片至此处加入该分组", "Drag cards here to add to this group"))
+                                                                    .font(.system(size: 12))
+                                                            }
+                                                            .foregroundColor(targetedDropGroupId == group.id ? .accentColor : .secondary)
+                                                        }
+                                                        .padding(.horizontal, 16)
+                                                        .dropDestination(for: String.self) { items, _ in
+                                                            guard isReorderingAllowed, let draggedId = items.first else { return false }
+                                                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                                                store.moveService(serviceId: draggedId, toGroupId: group.id, targetServiceId: nil)
+                                                            }
+                                                            return true
+                                                        } isTargeted: { targeted in
+                                                            if isReorderingAllowed {
+                                                                targetedDropGroupId = targeted ? group.id : nil
+                                                            }
+                                                        }
+                                                    } else {
+                                                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 235, maximum: 280), spacing: 12)], spacing: 14) {
+                                                            ForEach(groupServices) { s in
+                                                                ServiceCardView(
+                                                                    service: s,
+                                                                    isSelected: store.selectedServiceId == s.id,
+                                                                    isDraggable: isReorderingAllowed,
+                                                                    onSelect: {
+                                                                        store.selectedServiceId = s.id
+                                                                    },
+                                                                    onEdit: {
+                                                                        serviceToEdit = s
+                                                                    },
+                                                                    onDelete: {
+                                                                        serviceToDelete = s
+                                                                    }
+                                                                )
+                                                                .overlay(
+                                                                    targetedDropServiceId == s.id
+                                                                        ? RoundedRectangle(cornerRadius: ProTheme.cornerRadiusCard)
+                                                                            .strokeBorder(Color.accentColor, lineWidth: 2)
+                                                                        : nil
+                                                                )
+                                                                .dropDestination(for: String.self) { items, _ in
+                                                                    guard isReorderingAllowed, let draggedId = items.first, draggedId != s.id else { return false }
+                                                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                                                        store.moveService(
+                                                                            serviceId: draggedId,
+                                                                            toGroupId: group.id,
+                                                                            targetServiceId: s.id
+                                                                        )
+                                                                    }
+                                                                    return true
+                                                                } isTargeted: { targeted in
+                                                                    if isReorderingAllowed {
+                                                                        targetedDropServiceId = targeted ? s.id : nil
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        .padding(.horizontal, 16)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // 未分组服务
+                                    let knownGroupIds = Set(store.groups.map(\.id))
+                                    let ungroupedServices = filteredServices.filter { s in
+                                        s.groupId == nil || !knownGroupIds.contains(s.groupId!)
+                                    }
+                                    if !ungroupedServices.isEmpty {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            GroupHeaderView(
+                                                group: nil,
+                                                services: ungroupedServices,
+                                                isCollapsed: isUngroupedCollapsed,
+                                                onToggleCollapse: {
+                                                    isUngroupedCollapsed.toggle()
+                                                }
+                                            )
+
+                                            if !isUngroupedCollapsed {
+                                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 235, maximum: 280), spacing: 12)], spacing: 14) {
+                                                    ForEach(ungroupedServices) { s in
+                                                        ServiceCardView(
+                                                            service: s,
+                                                            isSelected: store.selectedServiceId == s.id,
+                                                            isDraggable: isReorderingAllowed,
+                                                            onSelect: {
+                                                                store.selectedServiceId = s.id
+                                                            },
+                                                            onEdit: {
+                                                                serviceToEdit = s
+                                                            },
+                                                            onDelete: {
+                                                                serviceToDelete = s
+                                                            }
+                                                        )
+                                                        .overlay(
+                                                            targetedDropServiceId == s.id
+                                                                ? RoundedRectangle(cornerRadius: ProTheme.cornerRadiusCard)
+                                                                    .strokeBorder(Color.accentColor, lineWidth: 2)
+                                                                : nil
+                                                        )
+                                                        .dropDestination(for: String.self) { items, _ in
+                                                            guard isReorderingAllowed, let draggedId = items.first, draggedId != s.id else { return false }
+                                                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                                                store.moveService(serviceId: draggedId, toGroupId: nil, targetServiceId: s.id)
+                                                            }
+                                                            return true
+                                                        } isTargeted: { targeted in
+                                                            if isReorderingAllowed {
+                                                                targetedDropServiceId = targeted ? s.id : nil
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                .padding(.horizontal, 16)
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 14)
+                            }
                         }
                     } else {
                         ServiceListView(
@@ -326,6 +514,11 @@ struct MainWindow: View {
             }
 
             ToolbarItemGroup(placement: .primaryAction) {
+                Button(action: { showAddGroupSheet = true }) {
+                    Label(L("新建分组", "New Group"), systemImage: "folder.badge.plus")
+                }
+                .help(L("新建自定义服务分组", "Create a new custom service group"))
+
                 Button(action: { showAddSheet = true }) {
                     Label(L("添加服务", "Add Service"), systemImage: "plus")
                 }
@@ -407,6 +600,30 @@ struct MainWindow: View {
                 }
             }
         }
+        .sheet(isPresented: $showAddGroupSheet) {
+            GroupEditorSheet { newGroup in
+                store.addGroup(newGroup)
+            }
+        }
+        .sheet(item: $groupToEdit) { g in
+            GroupEditorSheet(groupToEdit: g) { updated in
+                store.updateGroup(updated)
+            }
+        }
+        .alert(L("确定删除分组「\(groupToDelete?.name ?? "")」吗？", "Delete group \"\(groupToDelete?.name ?? "")\"?"), isPresented: Binding(
+            get: { groupToDelete != nil },
+            set: { if !$0 { groupToDelete = nil } }
+        )) {
+            Button(L("取消", "Cancel"), role: .cancel) { groupToDelete = nil }
+            Button(L("删除分组", "Delete Group"), role: .destructive) {
+                if let g = groupToDelete {
+                    store.deleteGroup(id: g.id)
+                }
+                groupToDelete = nil
+            }
+        } message: {
+            Text(L("删除分组后，该分组内的服务将自动移至「未分组」，不会删除任何服务配置或数据。", "The services in this group will be moved to Ungrouped. No service configurations or data will be deleted."))
+        }
         .alert(L("确定删除服务 \(serviceToDelete?.name ?? "") 吗？", "Delete service \(serviceToDelete?.name ?? "")?"), isPresented: Binding(
             get: { serviceToDelete != nil },
             set: { if !$0 { serviceToDelete = nil } }
@@ -431,6 +648,10 @@ struct MainWindow: View {
                 WindowManager.shared.registerMainWindow(window)
             }
         )
+    }
+
+    private var isReorderingAllowed: Bool {
+        filter == .all && searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var filteredServices: [Service] {

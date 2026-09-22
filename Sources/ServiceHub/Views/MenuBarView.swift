@@ -51,98 +51,55 @@ struct MenuBarView: View {
                 .padding(.vertical, 24)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(store.services) { s in
-                        let st = supervisor.statuses[s.id] ?? .unknown
-                        let rt = supervisor.runtimes[s.id]
-                        let isBusy = supervisor.isBusy[s.id] == true
-
-                        HStack(spacing: 10) {
-                            ServiceIconView(service: s, size: 26)
-
-                            VStack(alignment: .leading, spacing: 3) {
+                    if store.groups.isEmpty {
+                        ForEach(store.services) { s in
+                            serviceItemView(s)
+                        }
+                    } else {
+                        ForEach(store.groups) { group in
+                            let groupServices = store.services.filter { $0.groupId == group.id }
+                            if !groupServices.isEmpty {
                                 HStack(spacing: 5) {
-                                    Text(s.name)
-                                        .font(.system(size: 13, weight: .medium))
-                                        .lineLimit(1)
-
-                                    if let webStr = s.webURL?.trimmingCharacters(in: .whitespacesAndNewlines),
-                                       !webStr.isEmpty,
-                                       let url = URL(string: webStr) {
-                                        Button(action: { NSWorkspace.shared.open(url) }) {
-                                            Image(systemName: "safari")
-                                                .font(.system(size: 11))
-                                                .foregroundColor(.accentColor)
-                                        }
-                                        .buttonStyle(.plain)
-                                        .help(L("打开服务主页: \(webStr)", "Open homepage: \(webStr)"))
-                                    }
-
-                                    if supervisor.updatesAvailable[s.id] == true {
-                                        Text(L("可更新", "Update"))
-                                            .font(.system(size: 8, weight: .bold))
-                                            .padding(.horizontal, 3.5)
-                                            .padding(.vertical, 1)
-                                            .background(Color.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 2.5))
-                                            .foregroundColor(.blue)
-                                    }
+                                    Image(systemName: group.icon.isEmpty ? "folder" : group.icon)
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundColor(.accentColor)
+                                    Text(group.name)
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    let running = groupServices.filter { supervisor.statuses[$0.id] == .running }.count
+                                    Text("\(running)/\(groupServices.count)")
+                                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                        .foregroundColor(.secondary)
                                 }
+                                .padding(.top, 4)
+                                .padding(.horizontal, 4)
 
-                                HStack(spacing: 5) {
-                                    Text(s.category.shortName)
-                                        .font(.system(size: 9, weight: .semibold))
-                                        .foregroundColor(s.category.color)
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 1)
-                                        .background(s.category.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
-
-                                    HStack(spacing: 4) {
-                                        StatusDotView(color: st.color, size: 6)
-                                        Text(st.displayName)
-                                            .font(.system(size: 10, weight: .medium))
-                                            .foregroundColor(st.color)
-                                    }
-
-                                    if let uptime = rt?.uptime, st == .running {
-                                        Text("⏱ \(uptime)")
-                                            .font(.system(size: 9))
-                                            .foregroundColor(.secondary)
-                                            .lineLimit(1)
-                                    }
+                                ForEach(groupServices) { s in
+                                    serviceItemView(s)
                                 }
-                            }
-
-                            Spacer(minLength: 4)
-
-                            // 每一个服务独立的控制按钮组：启动 / 关闭 / 重启
-                            if isBusy {
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .frame(width: 60)
-                            } else if st == .running {
-                                HStack(spacing: 6) {
-                                    Button(L("关闭", "Stop")) {
-                                        Task { await supervisor.stopService(s) }
-                                    }
-                                    .proButton(tint: .red)
-                                    .controlSize(.small)
-
-                                    Button(L("重启", "Restart")) {
-                                        Task { await supervisor.restartService(s) }
-                                    }
-                                    .proButton(tint: .blue)
-                                    .controlSize(.small)
-                                }
-                            } else {
-                                Button(L("启动", "Start")) {
-                                    Task { await supervisor.startService(s) }
-                                }
-                                .proButton(tint: .green)
-                                .controlSize(.small)
                             }
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .proCard(statusColor: st.color, cornerRadius: 8)
+
+                        let knownGroupIds = Set(store.groups.map(\.id))
+                        let ungrouped = store.services.filter { $0.groupId == nil || !knownGroupIds.contains($0.groupId!) }
+                        if !ungrouped.isEmpty {
+                            HStack(spacing: 5) {
+                                Image(systemName: "tray")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                                Text(L("未分组", "Ungrouped"))
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                            }
+                            .padding(.top, 4)
+                            .padding(.horizontal, 4)
+
+                            ForEach(ungrouped) { s in
+                                serviceItemView(s)
+                            }
+                        }
                     }
                 }
                 .padding(12)
@@ -173,6 +130,101 @@ struct MenuBarView: View {
         }
         .frame(width: 375)
         .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    @ViewBuilder
+    private func serviceItemView(_ s: Service) -> some View {
+        let st = supervisor.statuses[s.id] ?? .unknown
+        let rt = supervisor.runtimes[s.id]
+        let isBusy = supervisor.isBusy[s.id] == true
+
+        HStack(spacing: 10) {
+            ServiceIconView(service: s, size: 26)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    Text(s.name)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+
+                    if let webStr = s.webURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !webStr.isEmpty,
+                       let url = URL(string: webStr) {
+                        Button(action: { NSWorkspace.shared.open(url) }) {
+                            Image(systemName: "safari")
+                                .font(.system(size: 11))
+                                .foregroundColor(.accentColor)
+                        }
+                        .buttonStyle(.plain)
+                        .help(L("打开服务主页: \(webStr)", "Open homepage: \(webStr)"))
+                    }
+
+                    if supervisor.updatesAvailable[s.id] == true {
+                        Text(L("可更新", "Update"))
+                            .font(.system(size: 8, weight: .bold))
+                            .padding(.horizontal, 3.5)
+                            .padding(.vertical, 1)
+                            .background(Color.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 2.5))
+                            .foregroundColor(.blue)
+                    }
+                }
+
+                HStack(spacing: 5) {
+                    Text(s.category.shortName)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(s.category.color)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(s.category.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 3))
+
+                    HStack(spacing: 4) {
+                        StatusDotView(color: st.color, size: 6)
+                        Text(st.displayName)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(st.color)
+                    }
+
+                    if let uptime = rt?.uptime, st == .running {
+                        Text("⏱ \(uptime)")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+
+            Spacer(minLength: 4)
+
+            // 每一个服务独立的控制按钮组：启动 / 关闭 / 重启
+            if isBusy {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 60)
+            } else if st == .running {
+                HStack(spacing: 6) {
+                    Button(L("关闭", "Stop")) {
+                        Task { await supervisor.stopService(s) }
+                    }
+                    .proButton(tint: .red)
+                    .controlSize(.small)
+
+                    Button(L("重启", "Restart")) {
+                        Task { await supervisor.restartService(s) }
+                    }
+                    .proButton(tint: .blue)
+                    .controlSize(.small)
+                }
+            } else {
+                Button(L("启动", "Start")) {
+                    Task { await supervisor.startService(s) }
+                }
+                .proButton(tint: .green)
+                .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .proCard(statusColor: st.color, cornerRadius: 8)
     }
 
     private func openMainWindow() {

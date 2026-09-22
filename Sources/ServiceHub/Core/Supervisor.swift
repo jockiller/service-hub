@@ -428,6 +428,30 @@ public final class Supervisor: ObservableObject {
         await startService(service)
     }
 
+    /// 批量启动某个分组内的所有服务
+    public func startServices(in groupId: String?) {
+        let targets = ServiceStore.shared.services.filter {
+            $0.groupId == groupId && (self.statuses[$0.id] != .running && self.isBusy[$0.id] != true)
+        }
+        Task {
+            for s in targets {
+                await self.startService(s)
+            }
+        }
+    }
+
+    /// 批量停止某个分组内的所有服务
+    public func stopServices(in groupId: String?) {
+        let targets = ServiceStore.shared.services.filter {
+            $0.groupId == groupId && (self.statuses[$0.id] == .running && self.isBusy[$0.id] != true)
+        }
+        Task {
+            for s in targets {
+                await self.stopService(s)
+            }
+        }
+    }
+
     /// 强制单次手动刷新状态
     public func refreshService(_ service: Service) async {
         await probeService(service)

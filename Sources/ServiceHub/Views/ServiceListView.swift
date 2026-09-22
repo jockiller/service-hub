@@ -241,6 +241,36 @@ struct ServiceListView: View {
                         Button(L("编辑服务配置...", "Edit Service...")) { onEdit(s) }
                         Button(L("刷新状态", "Refresh Status")) { Task { await supervisor.probeService(s) } }
 
+                        Divider()
+
+                        Menu(L("移至分组", "Move to Group")) {
+                            Button(action: {
+                                ServiceStore.shared.setServiceGroup(serviceId: s.id, groupId: nil)
+                            }) {
+                                HStack {
+                                    Text(L("未分组", "Ungrouped"))
+                                    if s.groupId == nil {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                            if !ServiceStore.shared.groups.isEmpty {
+                                Divider()
+                                ForEach(ServiceStore.shared.groups) { g in
+                                    Button(action: {
+                                        ServiceStore.shared.setServiceGroup(serviceId: s.id, groupId: g.id)
+                                    }) {
+                                        HStack {
+                                            Text(g.name)
+                                            if s.groupId == g.id {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         if s.checkUpdateEnabled {
                             Divider()
                             Button {
