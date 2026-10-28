@@ -43,6 +43,12 @@ public final class Supervisor: ObservableObject {
     /// 应用启动后待拉起的服务集合（探活循环按前置条件就绪情况逐个消费）
     /// 「随 ServiceHub 启动」不再是独立拉起路线，而是交给探活循环统一决策
     private var pendingStartupLaunch: Set<String> = []
+    /// 各服务连续「探活未存活」的轮次；nil 表示该服务当前不处于崩溃守护观察中
+    private var exitProbeCounts: [String: Int] = [:]
+
+    /// 进程退出后需连续确认多少轮探活「仍未存活」才自动重拉。
+    /// 以探活周期为单位计时（6s × 10 轮 ≈ 60s），用于避开服务自身更新/自重启造成的短暂退出窗口。
+    public static let autoRestartConfirmProbes = 10
 
     public init() {
         startProbeLoop()
@@ -87,7 +93,7 @@ public final class Supervisor: ObservableObject {
         //  3. 未运行时按优先级决策：
         //     a) pendingStartupLaunch 含此服务 → 检查前置条件，
         //        满足则拉起并消费 pending 标记；未满足则标记/维持等待态
-        //     b) autoStart 守护 且 之前在运行且本次停止 → 走熔断窗口自动重拉
+        //     b) autoStart 守护 且 处于崩溃守护观察中 → 连续 N 轮探活未存活后走熔断窗口自动重拉
         //     c) 其余（手动停止等）→ 仅更新状态，不做任何拉起
         // ============================================================
 
@@ -124,6 +130,12 @@ public final class Supervisor: ObservableObject {
             // 运行正常，恢复重试计数与熔断状态
             restartTimestamps[service.id] = []
             isCircuitBroken[service.id] = false
+            // 处于运行态即登记崩溃守护监护；关闭 autoStart 的服务不参与监护
+            if service.autoStart {
+                exitProbeCounts[service.id] = 0
+            } else {
+                exitProbeCounts.removeValue(forKey: service.id)
+            }
 
             // 健康检查失败 N 次强制重启：进程仍在（statusCommand 判活）但 HTTP 探活连续失败
             // 强制重启同样计入滑动窗口熔断，防止"进程活着但不健康"时无限重启循环
@@ -256,12 +268,25 @@ public final class Supervisor: ObservableObject {
                 uptime: nil
             )
 
-            // 如果服务配置了自启动守护，且之前是运行态、本次检测到停止（崩溃守护，非手动停止）
-            if service.autoStart && res.status == .stopped && prevStatus == .running {
-                // 检查是否已被熔断暂停
+            // 崩溃守护：只接管「上一轮还在跑、本轮发现退出」的服务，手动停止等场景不参与。
+            // 服务自身更新/自重启时会短暂退出，因此需连续 N 轮探活都未存活才判定为真崩溃，
+            // 避免刚退出就被立刻拉起、与它自己的重启流程抢进程。
+            if service.autoStart, res.status == .stopped,
+               prevStatus == .running || exitProbeCounts[service.id] != nil {
+                // 检查是否已被熔断暂停（优先于观察期判定，保持 failed 状态不被覆盖）
                 if isCircuitBroken[service.id] == true {
                     self.statuses[service.id] = .failed
                     self.runtimes[service.id]?.status = .failed
+                    return
+                }
+
+                let confirmedCount = min((exitProbeCounts[service.id] ?? 0) + 1, Self.autoRestartConfirmProbes)
+                exitProbeCounts[service.id] = confirmedCount
+
+                guard confirmedCount >= Self.autoRestartConfirmProbes else {
+                    if confirmedCount == 1 {
+                        AppLogger.log("[Supervisor] 服务「\(service.name)」已退出，进入观察期 (\(Self.autoRestartConfirmProbes) 轮探活内未恢复才拉起)，暂不重拉")
+                    }
                     return
                 }
 
@@ -284,11 +309,16 @@ public final class Supervisor: ObservableObject {
                 } else {
                     history.append(now)
                     restartTimestamps[service.id] = history
-                    AppLogger.log("[Supervisor] 检测到服务「\(service.name)」异常退出，正在自动重拉 (\(service.restartWindowSeconds)s内第 \(history.count)/\(service.maxRestarts) 次)...")
+                    // 本次退出只拉起一次：清掉观察登记，避免拉起失败后每轮反复重试（与改动前的语义一致）
+                    exitProbeCounts.removeValue(forKey: service.id)
+                    AppLogger.log("[Supervisor] 服务「\(service.name)」连续 \(Self.autoRestartConfirmProbes) 轮探活未存活，判定为异常退出，正在自动重拉 (\(service.restartWindowSeconds)s内第 \(history.count)/\(service.maxRestarts) 次)...")
                     Task {
                         await startService(service)
                     }
                 }
+            } else if !service.autoStart {
+                // 关闭自动保活：清掉可能残留的观察计数，避免将来重新开启时沿用旧进度
+                exitProbeCounts.removeValue(forKey: service.id)
             }
         }
     }
@@ -387,6 +417,8 @@ public final class Supervisor: ObservableObject {
     public func stopService(_ service: Service) async {
         // 用户主动停止：丢弃「应用启动待拉起」标记，防止探活循环随后又把服务拉起来
         pendingStartupLaunch.remove(service.id)
+        // 主动停止同时退出崩溃守护，避免观察计数把服务又拉起来
+        exitProbeCounts.removeValue(forKey: service.id)
 
         guard let stopCmd = service.stopCommand, !stopCmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             print("[-] 服务 \(service.name) 未配置停止命令")
@@ -631,5 +663,6 @@ public final class Supervisor: ObservableObject {
         isCircuitBroken.removeValue(forKey: id)
         healthCheckFailCounts.removeValue(forKey: id)
         pendingStartupLaunch.remove(id)
+        exitProbeCounts.removeValue(forKey: id)
     }
 }
