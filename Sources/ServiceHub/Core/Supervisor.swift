@@ -543,10 +543,14 @@ public final class Supervisor: ObservableObject {
         defer { isCheckingUpdates[service.id] = false }
 
         print("[Supervisor] 正在检测服务「\(service.name)」更新...")
-        let res = await ProcessRunner.run(command: checkCmd, timeout: 30)
+        let isBrewCheck = checkCmd.contains("brew outdated")
+        var effectiveCmd = checkCmd
+        if isBrewCheck && !effectiveCmd.contains("--verbose") && !effectiveCmd.contains("-v") {
+            effectiveCmd = effectiveCmd.replacingOccurrences(of: "brew outdated", with: "brew outdated --verbose")
+        }
+        let res = await ProcessRunner.run(command: effectiveCmd, timeout: 30)
 
         // 针对 Homebrew outdated 的退出码特性：有更新时退出码为 1，无更新时退出码为 0
-        let isBrewCheck = checkCmd.contains("brew outdated")
         let meaningfulLine = extractMeaningfulUpdateLine(from: res.output)
 
         if (res.isSuccess || (isBrewCheck && res.exitCode == 1)) && meaningfulLine != nil {
@@ -575,6 +579,8 @@ public final class Supervisor: ObservableObject {
             .filter { line in
                 !line.isEmpty &&
                 !line.hasPrefix("==>") &&
+                !line.hasPrefix("Warning:") &&
+                !line.hasPrefix("Error:") &&
                 !line.hasPrefix("✔") &&
                 !line.hasPrefix("✖") &&
                 !line.hasPrefix("ℹ") &&

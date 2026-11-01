@@ -41,13 +41,17 @@ struct MainWindow: View {
     @ObservedObject var store = ServiceStore.shared
     @ObservedObject var supervisor = Supervisor.shared
     @ObservedObject var tunnelManager = CloudflareTunnelManager.shared
+    @ObservedObject var settings = AppSettings.shared
     // 观察语言变化：切换语言时立即刷新界面文案
     @ObservedObject var localization = Localization.shared
+
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var viewMode: ViewMode = .card
     @State private var filter: ServiceFilter = .all
     @State private var searchText: String = ""
     @State private var isLogCollapsed: Bool = false
+    @State private var isSidebarCollapsed: Bool = false
 
     @State private var showAddSheet = false
     @State private var showAddGroupSheet = false
@@ -64,86 +68,16 @@ struct MainWindow: View {
     @State private var showAlert = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // 上半部分顶部：安全过滤与状态标签栏
-            HStack(spacing: 8) {
-                HStack(spacing: 4) {
-                    ForEach(ServiceFilter.allCases, id: \.self) { f in
-                        let count = countForFilter(f)
-                        let isSelected = filter == f
-                        Button(action: { filter = f }) {
-                            HStack(spacing: 5) {
-                                Text(f.title)
-                                Text("\(count)")
-                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                                    .padding(.horizontal, 4.5)
-                                    .padding(.vertical, 1)
-                                    .background(
-                                        isSelected
-                                            ? Color.accentColor.opacity(0.2)
-                                            : Color.primary.opacity(0.06)
-                                    )
-                                    .foregroundColor(
-                                        isSelected
-                                            ? .accentColor
-                                            : (f == .tunneled && count > 0 ? .orange : .secondary)
-                                    )
-                                    .cornerRadius(4)
-                            }
-                            .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                Group {
-                                    if isSelected {
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .fill(Color.accentColor.opacity(0.12))
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 6)
-                                                    .strokeBorder(Color.accentColor.opacity(0.3), lineWidth: 0.5)
-                                            )
-                                    }
-                                }
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundColor(isSelected ? .primary : .secondary)
-                    }
-                }
-                .padding(3)
-                .background(Color.primary.opacity(0.04))
-                .cornerRadius(8)
+        ZStack {
+            M3AmbientBackground()
 
-                Spacer()
+            VStack(spacing: 0) {
+                // Material 3 统一顶部控制栏（不跨入系统标题栏遮挡区，100% 可见可点）
+                m3HeaderToolbarView
 
-                // 安全警示：若有公网暴露服务，显示警示与一键切断所有隧道按钮
-                let tunneledCount = store.services.filter { tunnelManager.isTunnelActive(for: $0.id) }.count
-                if tunneledCount > 0 {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.shield.fill")
-                            .foregroundColor(.orange)
-                        Text(L("当前 \(tunneledCount) 个服务已暴露公网", "\(tunneledCount) service(s) exposed publicly"))
-                            .font(.caption2.bold())
-                            .foregroundColor(.orange)
+                Divider().opacity(0.35)
 
-                        Button(L("切断全部公网", "Disconnect All")) {
-                            tunnelManager.stopAllTunnels()
-                        }
-                        .proButton(tint: .red, isProminent: true, size: .mini)
-                        .help(L("安全熔断：立即切断所有 Cloudflare 公网穿透映射", "Emergency kill switch: disconnect all Cloudflare tunnels"))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 7)
-            .proBar()
-
-            Divider()
-
-            // 上半部分：服务展示区 (Card / List)
+                // 上半部分：服务展示区 (Card / List)
             VStack(spacing: 0) {
                 if store.services.isEmpty {
                     VStack(spacing: 12) {
@@ -489,92 +423,13 @@ struct MainWindow: View {
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 120)
-                        .background(Color(NSColor.textBackgroundColor))
+                        .proBar()
                     }
                 }
+            }
             }
         }
-        // 顶部工具栏
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Picker("", selection: $viewMode) {
-                    ForEach(ViewMode.allCases, id: \.self) { mode in
-                        Label(mode.title, systemImage: mode.icon).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 130)
-            }
-
-            ToolbarItem(placement: .automatic) {
-                Button(action: { Task { await supervisor.probeAllServices() } }) {
-                    Label(L("全部检测", "Probe All"), systemImage: "arrow.triangle.2.circlepath")
-                }
-                .help(L("重新检测所有服务状态与运行时长", "Re-probe status and uptime of all services"))
-            }
-
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button(action: { showAddGroupSheet = true }) {
-                    Label(L("新建分组", "New Group"), systemImage: "folder.badge.plus")
-                }
-                .help(L("新建自定义服务分组", "Create a new custom service group"))
-
-                Button(action: { showAddSheet = true }) {
-                    Label(L("添加服务", "Add Service"), systemImage: "plus")
-                }
-                .help(L("添加新服务", "Add a new service"))
-
-                Button(action: { showSettings = true }) {
-                    Label(L("偏好设置", "Settings"), systemImage: "gearshape")
-                }
-                .help(L("偏好设置与关于", "Settings & About"))
-
-                Menu {
-                    Button(L("检查所有服务更新", "Check All Service Updates")) {
-                        Task {
-                            let services = store.services.filter { $0.checkUpdateEnabled }
-                            guard !services.isEmpty else {
-                                alertMessage = L("尚未对任何服务开启更新检测。", "No services have update checks enabled.")
-                                showAlert = true
-                                return
-                            }
-                            var updatedCount = 0
-                            for s in services {
-                                let res = await supervisor.checkUpdate(for: s)
-                                if case .updateAvailable = res {
-                                    updatedCount += 1
-                                }
-                            }
-                            if updatedCount > 0 {
-                                alertMessage = L("检查完成，发现 \(updatedCount) 个服务有可用更新。", "Check complete. \(updatedCount) service(s) have updates available.")
-                            } else {
-                                alertMessage = L("检查完成，所有服务均已是最新版本。", "Check complete. All services are up to date.")
-                            }
-                            showAlert = true
-                        }
-                    }
-                    Divider()
-                    Button(L("导出服务配置备份 (YAML)...", "Export Config Backup (YAML)...")) {
-                        exportBackup()
-                    }
-                    Button(L("从备份恢复配置 (YAML)...", "Restore from Backup (YAML)...")) {
-                        importBackup()
-                    }
-                    Divider()
-                    Button(L("在访达中定位配置文件 (services.yaml)", "Reveal services.yaml in Finder")) {
-                        NSWorkspace.shared.activateFileViewerSelecting([store.configURL])
-                    }
-                    Button(L("在访达中定位应用日志 (servicehub.log)", "Reveal servicehub.log in Finder")) {
-                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: AppLogger.logFilePath)])
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .menuIndicator(.hidden)
-                .help(L("工具与配置备份", "Tools & Config Backup"))
-            }
-        }
-        .searchable(text: $searchText, placement: .toolbar, prompt: L("搜索服务名称或 ID...", "Search services..."))
+        .ignoresSafeArea(.container, edges: .top)
         .sheet(isPresented: $showAddSheet) {
             ServiceEditorSheet { newService in
                 store.addService(newService)
@@ -652,6 +507,231 @@ struct MainWindow: View {
 
     private var isReorderingAllowed: Bool {
         filter == .all && searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    // MARK: - Material 3 统一顶部控制栏（集成状态筛选、卡片/列表切换、快捷操作按钮与搜索框）
+    @ViewBuilder
+    private var m3HeaderToolbarView: some View {
+        let pillBg = ProTheme.cardBaseFill(colorScheme: colorScheme, isHovered: false, isSelected: false)
+        let tunneledCount = store.services.filter { tunnelManager.isTunnelActive(for: $0.id) }.count
+
+        HStack(spacing: 10) {
+            // 留出左上角 macOS 红绿灯按钮宽度，使整排按钮直接位于标题栏同一行
+            Spacer().frame(width: 68)
+
+            // 1. 状态过滤分段胶囊 (全部 / 运行中 / 已映射公网 / 已停止)
+            HStack(spacing: 4) {
+                ForEach(ServiceFilter.allCases, id: \.self) { f in
+                    let count = countForFilter(f)
+                    let isSelected = filter == f
+                    Button(action: {
+                        withAnimation(.easeOut(duration: 0.16)) {
+                            filter = f
+                        }
+                    }) {
+                        HStack(spacing: 5) {
+                            Text(f.title)
+                            Text("\(count)")
+                                .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                                .opacity(isSelected ? 0.92 : 0.65)
+                        }
+                        .font(.system(size: 11.5, weight: isSelected ? .semibold : .medium))
+                        .foregroundColor(isSelected ? .white : .secondary)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 5.5)
+                        .background(
+                            Group {
+                                if isSelected {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Color.accentColor)
+                                }
+                            }
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(3.5)
+            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(pillBg))
+
+            // 公网暴露安全熔断提示（如有）
+            if tunneledCount > 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.shield.fill")
+                        .foregroundColor(.orange)
+                    Text(L("\(tunneledCount) 个公网暴露", "\(tunneledCount) Public"))
+                        .font(.caption2.bold())
+                        .foregroundColor(.orange)
+
+                    Button(L("切断全部", "Stop All")) {
+                        tunnelManager.stopAllTunnels()
+                    }
+                    .proButton(tint: .red, isProminent: true, size: .mini)
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
+            Spacer()
+
+            // 2. 卡片 / 列表 M3 扁平分段切换器
+            HStack(spacing: 2) {
+                ForEach(ViewMode.allCases, id: \.self) { mode in
+                    let active = viewMode == mode
+                    Button(action: {
+                        withAnimation(.easeOut(duration: 0.14)) {
+                            viewMode = mode
+                        }
+                    }) {
+                        Image(systemName: mode.icon)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(active ? .primary : .secondary)
+                            .frame(width: 30, height: 25)
+                            .background(
+                                Group {
+                                    if active {
+                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                            .fill(ProTheme.innerContainerFill(colorScheme: colorScheme))
+                                    }
+                                }
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(mode.title)
+                }
+            }
+            .padding(3.5)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(pillBg))
+
+            // 3. 操作图标组（全部检测 / 新建分组 / 添加服务 / 外观模式 / 偏好设置 / 更多）
+            HStack(spacing: 2) {
+                titlebarIconButton(symbol: "arrow.triangle.2.circlepath", tooltip: L("全部检测", "Probe All")) {
+                    Task { await supervisor.probeAllServices() }
+                }
+
+                titlebarIconButton(symbol: "folder.badge.plus", tooltip: L("新建分组", "New Group")) {
+                    showAddGroupSheet = true
+                }
+
+                titlebarIconButton(symbol: "plus", tooltip: L("添加服务", "Add Service")) {
+                    showAddSheet = true
+                }
+
+                Menu {
+                    ForEach(AppAppearanceMode.allCases, id: \.self) { mode in
+                        Button {
+                            settings.appearanceMode = mode
+                        } label: {
+                            Label(
+                                mode.displayName,
+                                systemImage: settings.appearanceMode == mode ? "checkmark.circle.fill" : mode.icon
+                            )
+                        }
+                    }
+                } label: {
+                    Image(systemName: settings.appearanceMode.icon)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .frame(width: 28, height: 25)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .frame(width: 28, height: 25)
+                .help(L("外观模式（跟随系统 / 浅色 / 深色）", "Appearance Mode"))
+
+                titlebarIconButton(symbol: "gearshape", tooltip: L("偏好设置", "Settings")) {
+                    showSettings = true
+                }
+
+                Menu {
+                    Button(L("检查所有服务更新", "Check All Service Updates")) {
+                        Task {
+                            let services = store.services.filter { $0.checkUpdateEnabled }
+                            guard !services.isEmpty else {
+                                alertMessage = L("尚未对任何服务开启更新检测。", "No services have update checks enabled.")
+                                showAlert = true
+                                return
+                            }
+                            var updatedCount = 0
+                            for s in services {
+                                let res = await supervisor.checkUpdate(for: s)
+                                if case .updateAvailable = res {
+                                    updatedCount += 1
+                                }
+                            }
+                            if updatedCount > 0 {
+                                alertMessage = L("检查完成，发现 \(updatedCount) 个服务有可用更新。", "Check complete. \(updatedCount) service(s) have updates available.")
+                            } else {
+                                alertMessage = L("检查完成，所有服务均已是最新版本。", "Check complete. All services are up to date.")
+                            }
+                            showAlert = true
+                        }
+                    }
+                    Divider()
+                    Button(L("导出服务配置备份 (YAML)...", "Export Config Backup (YAML)...")) { exportBackup() }
+                    Button(L("从备份恢复配置 (YAML)...", "Restore from Backup (YAML)...")) { importBackup() }
+                    Divider()
+                    Button(L("在访达中定位配置文件 (services.yaml)", "Reveal services.yaml in Finder")) {
+                        NSWorkspace.shared.activateFileViewerSelecting([store.configURL])
+                    }
+                    Button(L("在访达中定位应用日志 (servicehub.log)", "Reveal servicehub.log in Finder")) {
+                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: AppLogger.logFilePath)])
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .frame(width: 28, height: 25)
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .frame(width: 28, height: 25)
+                .help(L("工具与配置备份", "Tools & Config Backup"))
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 3.5)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(pillBg))
+
+            // 4. 搜索输入框（M3 扁平圆角框）
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11.5))
+                    .foregroundColor(.secondary)
+                TextField(L("搜索服务名称或 ID...", "Search services..."), text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                if !searchText.isEmpty {
+                    Button(action: { searchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6.5)
+            .frame(width: 185)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(pillBg))
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .proBar()
+    }
+
+    @ViewBuilder
+    private func titlebarIconButton(symbol: String, tooltip: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundColor(.secondary)
+                .frame(width: 28, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
     }
 
     private var filteredServices: [Service] {

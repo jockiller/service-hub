@@ -3,12 +3,53 @@ import ServiceManagement
 import AppKit
 import SwiftUI
 
+public enum AppAppearanceMode: String, CaseIterable, Sendable {
+    case system = "system"
+    case light = "light"
+    case dark = "dark"
+
+    @MainActor
+    public var displayName: String {
+        switch self {
+        case .system: return L("跟随系统", "System")
+        case .light: return L("浅色模式", "Light")
+        case .dark: return L("深色模式", "Dark")
+        }
+    }
+
+    public var icon: String {
+        switch self {
+        case .system: return "circle.lefthalf.filled"
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.stars.fill"
+        }
+    }
+
+    public var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
 @MainActor
 public final class AppSettings: ObservableObject {
     public static let shared = AppSettings()
 
     @AppStorage("probeInterval") public var probeInterval: Double = 6.0
     @AppStorage("customConfigPath") public var customConfigPath: String = ""
+
+    @Published public var appearanceMode: AppAppearanceMode = {
+        let raw = UserDefaults.standard.string(forKey: "appearanceMode") ?? "system"
+        return AppAppearanceMode(rawValue: raw) ?? .system
+    }() {
+        didSet {
+            UserDefaults.standard.set(appearanceMode.rawValue, forKey: "appearanceMode")
+            applyWindowAppearance()
+        }
+    }
 
     @Published public var hideDockIcon: Bool = UserDefaults.standard.bool(forKey: "hideDockIcon") {
         didSet {
@@ -31,10 +72,24 @@ public final class AppSettings: ObservableObject {
 
     public init() {
         checkLaunchAtLoginStatus()
+        DispatchQueue.main.async { [weak self] in
+            self?.applyWindowAppearance()
+        }
         if hideDockIcon {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                 self?.applyDockActivationPolicy()
             }
+        }
+    }
+
+    public func applyWindowAppearance() {
+        switch appearanceMode {
+        case .system:
+            NSApp.appearance = nil
+        case .light:
+            NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            NSApp.appearance = NSAppearance(named: .darkAqua)
         }
     }
 
@@ -51,12 +106,11 @@ public final class AppSettings: ObservableObject {
                 NSApp.setActivationPolicy(.regular)
             }
 
-            // 保持当前所有已可见的主窗口与设置界面不因策略变更而瞬间消失
             for win in visibleWindows {
                 win.makeKeyAndOrderFront(nil)
                 win.orderFrontRegardless()
             }
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.activate()
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                 WindowManager.shared.isChangingActivationPolicy = false
@@ -65,7 +119,6 @@ public final class AppSettings: ObservableObject {
     }
 
     public func setHideDockIcon(_ hide: Bool) -> Bool {
-        // 安全保护：不能在状态栏图标未开启时同时隐藏 Dock 图标，否则用户无法唤起主窗口
         if hide && !showMenuBarIcon {
             return false
         }
@@ -77,7 +130,6 @@ public final class AppSettings: ObservableObject {
     }
 
     public func setShowMenuBarIcon(_ show: Bool) -> Bool {
-        // 安全保护：不能在隐藏 Dock 的同时关闭状态栏图标
         if !show && hideDockIcon {
             return false
         }
@@ -88,25 +140,21 @@ public final class AppSettings: ObservableObject {
     }
 
     public func checkLaunchAtLoginStatus() {
-        if #available(macOS 13.0, *) {
-            let status = SMAppService.mainApp.status
-            self.isLaunchAtLoginEnabled = (status == .enabled)
-        }
+        let status = SMAppService.mainApp.status
+        self.isLaunchAtLoginEnabled = (status == .enabled)
     }
 
     public func setLaunchAtLogin(_ enabled: Bool) {
-        if #available(macOS 13.0, *) {
-            do {
-                if enabled {
-                    try SMAppService.mainApp.register()
-                } else {
-                    try SMAppService.mainApp.unregister()
-                }
-                checkLaunchAtLoginStatus()
-            } catch {
-                print("[-] 设置开机自启动失败: \(error.localizedDescription)")
-                self.isLaunchAtLoginEnabled = enabled
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
             }
+            checkLaunchAtLoginStatus()
+        } catch {
+            print("[-] 设置开机自启动失败: \(error.localizedDescription)")
+            self.isLaunchAtLoginEnabled = enabled
         }
     }
 }

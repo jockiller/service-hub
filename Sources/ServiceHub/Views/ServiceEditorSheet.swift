@@ -67,17 +67,21 @@ struct ServiceEditorSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // 顶栏
-            HStack {
-                Text(serviceToEdit == nil ? L("添加服务", "Add Service") : L("编辑服务", "Edit Service"))
-                    .font(.headline)
-                Spacer()
-                Button(L("取消", "Cancel")) { dismiss() }
-                    .proButton()
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding()
+        ZStack {
+            M3AmbientBackground()
+
+            VStack(spacing: 0) {
+                // 顶栏
+                HStack {
+                    Text(serviceToEdit == nil ? L("添加服务", "Add Service") : L("编辑服务", "Edit Service"))
+                        .font(.headline)
+                    Spacer()
+                    Button(L("取消", "Cancel")) { dismiss() }
+                        .proButton()
+                        .keyboardShortcut(.cancelAction)
+                }
+                .padding()
+                .proBar()
 
             Divider()
 
@@ -93,7 +97,7 @@ struct ServiceEditorSheet: View {
                                 Text("Docker").tag(3)
                             }
                             .pickerStyle(.segmented)
-                            .onChange(of: selectedTemplate) { val in
+                            .onChange(of: selectedTemplate) { _, val in
                                 handleTemplateChange(val)
                             }
                         }
@@ -113,7 +117,7 @@ struct ServiceEditorSheet: View {
                                             Text("\(item.name) (\(item.isStarted ? L("运行中", "running") : L("已停止", "stopped")))").tag(BrewServiceItem?.some(item))
                                         }
                                     }
-                                    .onChange(of: selectedBrewItem) { item in
+                                    .onChange(of: selectedBrewItem) { _, item in
                                         if let item = item { applyBrewItem(item) }
                                     }
                                 }
@@ -165,7 +169,7 @@ struct ServiceEditorSheet: View {
                                             Text("\(c.name) (\(c.isRunning ? L("运行中", "running") : L("已停止", "stopped")))").tag(DockerContainerItem?.some(c))
                                         }
                                     }
-                                    .onChange(of: selectedDockerContainer) { item in
+                                    .onChange(of: selectedDockerContainer) { _, item in
                                         if let item = item { applyDockerItem(item) }
                                     }
                                 }
@@ -441,7 +445,7 @@ struct ServiceEditorSheet: View {
                         HStack {
                             Text(L("检查更新:", "Check update:")).frame(width: 90, alignment: .trailing)
                             Toggle(L("启用自动检查更新与一键升级", "Enable update check and upgrade"), isOn: $checkUpdateEnabled)
-                                .onChange(of: checkUpdateEnabled) { enabled in
+                                .onChange(of: checkUpdateEnabled) { _, enabled in
                                     if enabled {
                                         autoFillUpdateCommandsIfNeeded()
                                     }
@@ -625,6 +629,8 @@ struct ServiceEditorSheet: View {
                           startCommand.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             .padding(12)
+            .proBar()
+            }
         }
         .frame(width: 560, height: 600)
         .onAppear {

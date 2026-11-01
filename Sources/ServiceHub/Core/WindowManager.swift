@@ -16,6 +16,30 @@ public final class WindowManager: NSObject, NSWindowDelegate {
     public func registerMainWindow(_ window: NSWindow) {
         self.mainWindow = window
         window.delegate = self
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
+        window.styleMask.insert(.fullSizeContentView)
+        window.isMovableByWindowBackground = true
+        alignTrafficLights(in: window)
+    }
+
+    public func windowDidResize(_ notification: Notification) {
+        if let window = notification.object as? NSWindow, window === mainWindow {
+            alignTrafficLights(in: window)
+        }
+    }
+
+    private func alignTrafficLights(in window: NSWindow) {
+        let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        for (index, type) in buttons.enumerated() {
+            guard let btn = window.standardWindowButton(type),
+                  let superview = btn.superview else { continue }
+            var frame = btn.frame
+            frame.origin.x = 14 + CGFloat(index) * 20
+            frame.origin.y = (superview.bounds.height - frame.height) / 2 - 5
+            btn.setFrameOrigin(frame.origin)
+        }
     }
 
     /// 当应用失去焦点时处理窗口自动隐藏（仅在「隐藏 Dock 图标」的附属模式下等待失去焦点后自动收起）
@@ -106,7 +130,7 @@ public final class WindowManager: NSObject, NSWindowDelegate {
         }
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
     }
 }
 

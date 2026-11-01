@@ -18,32 +18,38 @@ struct LogView: View {
                         .frame(width: 1, height: 14)
                 }
 
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                    .font(.system(size: 11))
-                TextField(L("过滤日志关键词...", "Filter logs..."), text: $logTail.filterText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 11))
+                    TextField(L("过滤日志关键词...", "Filter logs..."), text: $logTail.filterText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
 
-                if !logTail.filterText.isEmpty {
-                    Button(action: { logTail.filterText = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                            .font(.system(size: 11))
+                    if !logTail.filterText.isEmpty {
+                        Button(action: { logTail.filterText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 11))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.05), in: Capsule(style: .continuous))
+                .frame(maxWidth: 260)
 
                 Spacer()
 
                 // 行数统计与截断指示
                 if !logTail.lines.isEmpty {
                     Text(L("最新 \(logTail.lines.count) 行", "Latest \(logTail.lines.count) lines"))
-                        .font(.caption2)
+                        .font(.caption2.weight(.medium))
                         .foregroundColor(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2.5)
+                        .background(Color.secondary.opacity(0.12), in: Capsule(style: .continuous))
                 }
 
                 // 一键清屏按钮
@@ -75,7 +81,7 @@ struct LogView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .background(Color(NSColor.windowBackgroundColor))
+            .proBar()
 
             Divider()
 
@@ -131,8 +137,8 @@ struct LogView: View {
                     }
                     .padding(10)
                 }
-                .background(Color(NSColor.textBackgroundColor))
-                .onChange(of: logTail.filteredLines.count) { _ in
+                .background(Color.primary.opacity(0.02))
+                .onChange(of: logTail.filteredLines.count) { _, _ in
                     if logTail.isFollowing, let lastIndex = logTail.filteredLines.indices.last {
                         proxy.scrollTo(lastIndex, anchor: .bottom)
                     }
@@ -142,7 +148,7 @@ struct LogView: View {
         .onAppear {
             logTail.loadLog(for: service.logPath)
         }
-        .onChange(of: service.logPath) { newPath in
+        .onChange(of: service.logPath) { _, newPath in
             logTail.loadLog(for: newPath)
         }
     }

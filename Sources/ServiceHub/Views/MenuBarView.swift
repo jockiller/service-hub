@@ -8,35 +8,37 @@ struct MenuBarView: View {
     @ObservedObject var localization = Localization.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // 顶栏：标题与状态概览
-            HStack {
-                Image(systemName: "server.rack")
-                    .foregroundColor(.accentColor)
-                Text(L("ServiceHub 服务列表", "ServiceHub Services"))
-                    .font(.system(size: 13, weight: .bold))
+        ZStack {
+            M3AmbientBackground()
 
-                Spacer()
+            VStack(alignment: .leading, spacing: 0) {
+                // 顶栏：标题与状态概览
+                HStack {
+                    Image(systemName: "server.rack")
+                        .foregroundColor(.accentColor)
+                    Text(L("ServiceHub 服务列表", "ServiceHub Services"))
+                        .font(.system(size: 13, weight: .bold))
 
-                let runningCount = store.services.filter { supervisor.statuses[$0.id] == .running }.count
-                Text(L("\(runningCount)/\(store.services.count) 运行中", "\(runningCount)/\(store.services.count) running"))
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.12))
-                    .cornerRadius(4)
+                    Spacer()
 
-                Button(action: { Task { await supervisor.probeAllServices() } }) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.caption)
+                    let runningCount = store.services.filter { supervisor.statuses[$0.id] == .running }.count
+                    Text(L("\(runningCount)/\(store.services.count) 运行中", "\(runningCount)/\(store.services.count) running"))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2.5)
+                        .background(Color.secondary.opacity(0.14), in: Capsule(style: .continuous))
+
+                    Button(action: { Task { await supervisor.probeAllServices() } }) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("重新检测状态", "Refresh Status"))
                 }
-                .buttonStyle(.plain)
-                .help(L("重新检测状态", "Refresh Status"))
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color(NSColor.windowBackgroundColor))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .proBar()
 
             Divider()
 
@@ -126,10 +128,10 @@ struct MenuBarView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(Color(NSColor.windowBackgroundColor))
+            .proBar()
+            }
         }
-        .frame(width: 375)
-        .background(Color(NSColor.windowBackgroundColor))
+        .frame(width: 385)
     }
 
     @ViewBuilder
@@ -224,7 +226,7 @@ struct MenuBarView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .proCard(statusColor: st.color, cornerRadius: 8)
+        .proCard(statusColor: st.color, cornerRadius: 12)
     }
 
     private func openMainWindow() {

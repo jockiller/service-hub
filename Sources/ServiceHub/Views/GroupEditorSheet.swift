@@ -36,21 +36,24 @@ struct GroupEditorSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // 顶栏标题
-            HStack {
-                Text(isEditing ? L("编辑分组", "Edit Group") : L("新建分组", "New Group"))
-                    .font(.headline)
-                Spacer()
-                Button(action: { dismiss() }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.title3)
+        ZStack {
+            M3AmbientBackground()
+
+            VStack(spacing: 0) {
+                // 顶栏标题
+                HStack {
+                    Text(isEditing ? L("编辑分组", "Edit Group") : L("新建分组", "New Group"))
+                        .font(.headline)
+                    Spacer()
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                            .font(.title3)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-            }
-            .padding(18)
-            .background(Color.primary.opacity(0.03))
+                .padding(18)
+                .proBar()
 
             Divider()
 
@@ -118,11 +121,12 @@ struct GroupEditorSheet: View {
                 Button(isEditing ? L("保存", "Save") : L("创建", "Create")) {
                     saveGroup()
                 }
-                .buttonStyle(.borderedProminent)
+                .proButton(isProminent: true)
                 .keyboardShortcut(.defaultAction)
             }
             .padding(16)
-            .background(Color.primary.opacity(0.02))
+            .proBar()
+            }
         }
         .frame(width: 420, height: 360)
         .onAppear {

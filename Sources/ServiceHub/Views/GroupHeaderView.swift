@@ -35,90 +35,62 @@ struct GroupHeaderView: View {
         HStack(spacing: 8) {
             // 折叠/展开按钮与标题区
             Button(action: onToggleCollapse) {
-                HStack(spacing: 7) {
+                HStack(spacing: 8) {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.secondary)
                         .rotationEffect(.degrees(isCollapsed ? 0 : 90))
                         .animation(.easeInOut(duration: 0.18), value: isCollapsed)
 
                     Image(systemName: group != nil ? groupIcon : "tray")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(.secondary)
 
                     Text(groupName)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.primary)
 
-                    // 计数与状态 Badge
-                    HStack(spacing: 4) {
-                        Text("\(totalCount)")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundColor(.secondary)
-
-                        if runningCount > 0 {
-                            Text("•")
-                                .font(.system(size: 8))
-                                .foregroundColor(.secondary)
-                            HStack(spacing: 3) {
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 5, height: 5)
-                                Text(L("\(runningCount) 运行中", "\(runningCount) running"))
-                                    .font(.system(size: 9, weight: .medium))
-                                    .foregroundColor(.green)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.primary.opacity(0.05), in: Capsule())
+                    // 极简扁平计数胶囊
+                    Text("\(runningCount)/\(totalCount)")
+                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(Color.primary.opacity(0.06), in: Capsule(style: .continuous))
                 }
             }
             .buttonStyle(.plain)
 
             Spacer()
 
-            // 批量控制按钮与分组菜单
+            // 批量控制液态玻璃胶囊按钮
             if !services.isEmpty {
-                HStack(spacing: 4) {
-                    // 一键启动
+                HStack(spacing: 6) {
                     let canStart = runningCount < totalCount
                     Button(action: {
                         showStartConfirm = true
                     }) {
-                        HStack(spacing: 3) {
+                        HStack(spacing: 3.5) {
                             Image(systemName: "play.fill")
                                 .font(.system(size: 8))
                             Text(L("一键启动", "Start All"))
-                                .font(.system(size: 10, weight: .medium))
                         }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundColor(canStart ? .accentColor : .secondary.opacity(0.5))
-                    .background(canStart ? Color.accentColor.opacity(0.1) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
+                    .proButton(tint: .accentColor, size: .mini)
                     .disabled(!canStart)
                     .help(L("一键启动该组所有未运行的服务", "Start all stopped services in this group"))
 
-                    // 一键停止
                     let canStop = runningCount > 0
                     Button(action: {
                         showStopConfirm = true
                     }) {
-                        HStack(spacing: 3) {
+                        HStack(spacing: 3.5) {
                             Image(systemName: "stop.fill")
                                 .font(.system(size: 8))
                             Text(L("一键停止", "Stop All"))
-                                .font(.system(size: 10, weight: .medium))
                         }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundColor(canStop ? .red : .secondary.opacity(0.5))
-                    .background(canStop ? Color.red.opacity(0.1) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
+                    .proButton(tint: .red, size: .mini)
                     .disabled(!canStop)
                     .help(L("一键停止该组所有正在运行的服务", "Stop all running services in this group"))
                 }
@@ -153,7 +125,7 @@ struct GroupHeaderView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 7)
-        .background(Color.primary.opacity(0.02))
+        .background(Color.primary.opacity(0.025))
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .alert(

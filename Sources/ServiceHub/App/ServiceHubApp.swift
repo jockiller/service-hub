@@ -70,9 +70,9 @@ struct ServiceHubApp: App {
         // 主程序窗口
         WindowGroup("ServiceHub", id: "main") {
             MainWindow()
+                .preferredColorScheme(settings.appearanceMode.colorScheme)
         }
-        .windowStyle(.titleBar)
-        .windowToolbarStyle(.unified)
+        .windowStyle(.hiddenTitleBar)
         .commands {
             SidebarCommands()
         }
@@ -80,11 +80,13 @@ struct ServiceHubApp: App {
         // 偏好设置窗口 (支持 ⌘,)
         Settings {
             SettingsView()
+                .preferredColorScheme(settings.appearanceMode.colorScheme)
         }
 
         // 顶部菜单栏常驻图标 (使用黑白 Template 规范图标，支持安全防重绑定)
         MenuBarExtra(isInserted: safeMenuBarBinding) {
             MenuBarView()
+                .preferredColorScheme(settings.appearanceMode.colorScheme)
         } label: {
             menuBarLabelView
         }

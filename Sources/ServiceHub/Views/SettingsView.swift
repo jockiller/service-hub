@@ -13,40 +13,55 @@ struct SettingsView: View {
     @State private var showAlert = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // 顶部关于横幅
-            HStack(spacing: 16) {
-                if let iconImg = NSApp.applicationIconImage {
-                    Image(nsImage: iconImg)
-                        .resizable()
-                        .frame(width: 40, height: 40)
-                } else {
-                    Image(systemName: "server.rack")
-                        .font(.system(size: 36))
-                        .foregroundColor(.accentColor)
+        ZStack {
+            M3AmbientBackground()
+
+            VStack(spacing: 0) {
+                // 顶部关于横幅
+                HStack(spacing: 16) {
+                    if let iconImg = NSApp.applicationIconImage {
+                        Image(nsImage: iconImg)
+                            .resizable()
+                            .frame(width: 42, height: 42)
+                    } else {
+                        Image(systemName: "server.rack")
+                            .font(.system(size: 36))
+                            .foregroundColor(.accentColor)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("ServiceHub")
+                            .font(.title3.bold())
+                        Text(L("版本 \(settings.appVersion)", "Version \(settings.appVersion)"))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
                 }
+                .padding(16)
+                .proBar()
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("ServiceHub")
-                        .font(.title3.bold())
-                    Text(L("版本 \(settings.appVersion)", "Version \(settings.appVersion)"))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                Divider()
 
-                Spacer()
-            }
-            .padding(16)
-            .proBar()
+                // 设置主体
+                Form {
+                    // 通用与外观
+                    Section {
+                        HStack {
+                            Text(L("外观模式:", "Appearance:"))
+                            Spacer()
+                            Picker("", selection: $settings.appearanceMode) {
+                                ForEach(AppAppearanceMode.allCases, id: \.self) { mode in
+                                    Text(mode.displayName).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 220)
+                        }
 
-            Divider()
-
-            // 设置主体
-            Form {
-                // 界面语言
-                Section {
-                    HStack {
-                        Text(L("界面语言:", "Language:"))
+                        HStack {
+                            Text(L("界面语言:", "Language:"))
                         Spacer()
                         Picker("", selection: Binding(
                             get: { Localization.shared.preference },
@@ -177,8 +192,10 @@ struct SettingsView: View {
                 .keyboardShortcut(.defaultAction)
             }
             .padding(12)
+            .proBar()
+            }
         }
-        .frame(width: 480, height: 440)
+        .frame(width: 520, height: 540)
         .alert(isPresented: $showAlert) {
             Alert(title: Text(L("提示", "Notice")), message: Text(alertMessage ?? ""), dismissButton: .default(Text(L("好的", "OK"))))
         }
