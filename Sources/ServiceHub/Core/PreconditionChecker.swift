@@ -1,18 +1,113 @@
 import Foundation
 import AppKit
+import CoreWLAN
 
 public final class PreconditionChecker {
     @MainActor private static var cachedWifiDev: String? = nil
 
     @MainActor
-    private static func getWifiDevice() async -> String {
+    private static func getWifiDevice(preferred: String? = nil) async -> String {
+        if let preferred = preferred?.trimmingCharacters(in: .whitespacesAndNewlines), !preferred.isEmpty {
+            return preferred
+        }
         if let dev = cachedWifiDev { return dev }
         let findDevCmd = "networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}'"
         let devRes = await ProcessRunner.run(command: findDevCmd, timeout: 2)
         let dev = devRes.output.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolved = dev.isEmpty ? "en0" : dev
-        cachedWifiDev = resolved
-        return resolved
+        if !dev.isEmpty {
+            cachedWifiDev = dev
+            return dev
+        }
+        return "en0"
+    }
+
+    private static func parseIpconfigSSID(from summary: String) -> String? {
+        for rawLine in summary.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard line.hasPrefix("SSID") else { continue }
+            let parts = line.split(separator: ":", maxSplits: 1)
+            guard parts.count == 2,
+                  parts[0].trimmingCharacters(in: .whitespaces) == "SSID" else { continue }
+            let value = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !value.isEmpty && value != "<redacted>" {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func parseAirPortSSID(from output: String) -> String? {
+        var expectingSSID = false
+        for rawLine in output.components(separatedBy: .newlines) {
+            let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { continue }
+            if expectingSSID {
+                expectingSSID = false
+                if trimmed.hasSuffix(":"),
+                   trimmed != "Current Network Information:",
+                   trimmed != "Other Local Wi-Fi Networks:" {
+                    let ssid = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !ssid.isEmpty && ssid != "<redacted>" {
+                        return ssid
+                    }
+                }
+                continue
+            }
+            if trimmed == "Current Network Information:" {
+                expectingSSID = true
+            }
+        }
+        return nil
+    }
+
+    /// 检测当前 Wi-Fi 连接状态；仅在需要匹配特定 SSID 时才回退到耗时的 system_profiler
+    @MainActor
+    private static func checkWifiStatus(resolveSSID: Bool) async -> (isConnected: Bool, ssid: String?) {
+        let cwIface = CWWiFiClient.shared().interface()
+        if let cwIface, (!cwIface.powerOn() || cwIface.wlanChannel() == nil) {
+            return (false, nil)
+        }
+
+        let targetDev = await getWifiDevice(preferred: cwIface?.interfaceName)
+        let summaryRes = await ProcessRunner.run(command: "ipconfig getsummary \(targetDev) 2>/dev/null", timeout: 2)
+        let summary = summaryRes.output
+
+        let isConnected: Bool
+        if cwIface != nil {
+            // CoreWLAN 已确认上电且关联信道；若 ipconfig 明确标为未激活则视为尚未就绪
+            isConnected = !(summary.contains("Active : FALSE") && !summary.contains("LinkStatusActive : TRUE"))
+        } else {
+            let isWifiPort = summary.contains("InterfaceType : WiFi")
+            isConnected = isWifiPort && (summary.contains("LinkStatusActive : TRUE") || summary.contains("IsPublished : TRUE"))
+        }
+
+        guard isConnected else {
+            return (false, nil)
+        }
+
+        var ssid: String? = cwIface?.ssid()?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if ssid?.isEmpty == true || ssid == "<redacted>" { ssid = nil }
+
+        if ssid == nil {
+            ssid = parseIpconfigSSID(from: summary)
+        }
+
+        if ssid == nil && resolveSSID {
+            let wifiRes = await ProcessRunner.run(command: "networksetup -getairportnetwork \(targetDev) 2>/dev/null", timeout: 2)
+            if wifiRes.output.contains("Current Wi-Fi Network:") {
+                let candidate = wifiRes.output.components(separatedBy: "Current Wi-Fi Network:").last?.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let candidate, !candidate.isEmpty {
+                    ssid = candidate
+                }
+            }
+        }
+
+        if ssid == nil && resolveSSID {
+            let profilerRes = await ProcessRunner.run(command: "system_profiler SPAirPortDataType 2>/dev/null", timeout: 5)
+            ssid = parseAirPortSSID(from: profilerRes.output)
+        }
+
+        return (true, ssid)
     }
 
     /// 检查服务的前置条件是否满足
@@ -38,31 +133,31 @@ public final class PreconditionChecker {
             return !res.isSuccess ? (true, L("当前处于离线模式", "Currently offline")) : (false, L("等待网络断开", "Waiting for network to disconnect"))
 
         case .wifiConnected:
-            let targetDev = await getWifiDevice()
-            let wifiCmd = "networksetup -getairportnetwork \(targetDev) 2>/dev/null"
-            let wifiRes = await ProcessRunner.run(command: wifiCmd, timeout: 2)
-            if wifiRes.output.contains("Current Wi-Fi Network:") {
-                let parts = wifiRes.output.components(separatedBy: "Current Wi-Fi Network:")
-                let currentSSID = parts.last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-                if !param.isEmpty {
-                    if currentSSID.localizedCaseInsensitiveContains(param) {
-                        return (true, L("已连接指定 Wi-Fi: \(currentSSID)", "Connected to specified Wi-Fi: \(currentSSID)"))
-                    } else {
-                        return (false, L("当前为 \(currentSSID)，等待连接指定 Wi-Fi: \(param)", "Currently on \(currentSSID); waiting for \(param)"))
-                    }
-                } else {
-                    return (true, L("已连接 Wi-Fi: \(currentSSID)", "Wi-Fi connected: \(currentSSID)"))
-                }
-            } else {
+            let wifiStatus = await checkWifiStatus(resolveSSID: !param.isEmpty)
+            guard wifiStatus.isConnected else {
                 return (false, L("等待连接 Wi-Fi", "Waiting for Wi-Fi"))
             }
 
+            if !param.isEmpty {
+                guard let currentSSID = wifiStatus.ssid, !currentSSID.isEmpty else {
+                    return (false, L("已连接 Wi-Fi，但系统限制读取网络名称，等待匹配: \(param)", "Wi-Fi connected, but SSID is redacted by macOS; waiting for \(param)"))
+                }
+                if currentSSID.localizedCaseInsensitiveContains(param) {
+                    return (true, L("已连接指定 Wi-Fi: \(currentSSID)", "Connected to specified Wi-Fi: \(currentSSID)"))
+                } else {
+                    return (false, L("当前为 \(currentSSID)，等待连接指定 Wi-Fi: \(param)", "Currently on \(currentSSID); waiting for \(param)"))
+                }
+            } else {
+                if let currentSSID = wifiStatus.ssid, !currentSSID.isEmpty {
+                    return (true, L("已连接 Wi-Fi: \(currentSSID)", "Wi-Fi connected: \(currentSSID)"))
+                } else {
+                    return (true, L("Wi-Fi 已连接", "Wi-Fi connected"))
+                }
+            }
+
         case .wifiDisconnected:
-            let targetDev = await getWifiDevice()
-            let wifiCmd = "networksetup -getairportnetwork \(targetDev) 2>/dev/null"
-            let wifiRes = await ProcessRunner.run(command: wifiCmd, timeout: 2)
-            if !wifiRes.output.contains("Current Wi-Fi Network:") {
+            let wifiStatus = await checkWifiStatus(resolveSSID: false)
+            if !wifiStatus.isConnected {
                 return (true, L("Wi-Fi 未连接", "Wi-Fi disconnected"))
             } else {
                 return (false, L("等待断开 Wi-Fi", "Waiting for Wi-Fi to disconnect"))

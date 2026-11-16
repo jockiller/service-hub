@@ -48,10 +48,10 @@ jobs:
           一款专为 macOS 设计的现代化本地服务可视化管理工具与守护引擎。
           统一纳管 Shell 脚本、Homebrew 服务、macOS 原生应用程序 (.app) 与 Docker 容器。
 
-          #### ✨ 本次更新 (v${{ steps.get_version.outputs.VERSION }})
-          - 🎨 **Material 3 现代看板视觉与沉浸式标题栏**：全新升级为 Material 3 纯净哑光容器色阶与无边框扁平胶囊设计；将状态筛选、卡片/列表切换、快捷操作与搜索框整合至标题栏同一行，消除顶部冗余空行。
-          - 🌗 **外观模式自由切换**：新增「跟随系统 / 浅色模式 / 深色模式」三档外观实时切换（支持顶栏快捷菜单与偏好设置面板）。
-          - 🔍 **Homebrew 更新检测增强**：自动为 `brew outdated` 检测命令补齐 `--verbose` 参数以展示精确版本号对比（如 `8.10.1 < 8.10.3`），并过滤标准错误流告警干扰。
+          #### 🛠️ 本次修复 (v${{ steps.get_version.outputs.VERSION }})
+          - 📶 **修复新版 macOS 下 Wi-Fi 前置条件无法通过的问题**：改用 `CoreWLAN` 与 `ipconfig getsummary` 检测 Wi-Fi 接口上电、信道关联与链路激活状态，不再依赖在新版 macOS 上因 SSID 隐私脱敏而固定报错的 `networksetup -getairportnetwork`。
+          - 🔎 **兼容指定 SSID 匹配**：在配置了特定 Wi-Fi 名称时，按 `CoreWLAN` → `ipconfig` → `networksetup` → `system_profiler` 顺序回退解析，兼顾速度与新系统兼容性。
+          - 🔄 **同步修复「Wi-Fi 未连接」条件**：确保 `.wifiConnected` 与 `.wifiDisconnected` 使用同一套可靠的底层状态判定。
 
           #### 📦 下载安装
           - **DMG 镜像 (推荐)**: 下载 `.dmg` 文件，双击打开并将 `ServiceHub` 拖入 `Applications` 应用程序文件夹即可。
