@@ -2,7 +2,6 @@ import SwiftUI
 
 @MainActor
 struct MenuBarView: View {
-    @Environment(\.openWindow) private var openWindow
     @ObservedObject var store = ServiceStore.shared
     @ObservedObject var supervisor = Supervisor.shared
     @ObservedObject var localization = Localization.shared
@@ -119,7 +118,7 @@ struct MenuBarView: View {
 
                 Spacer()
 
-                Button(action: { NSApp.terminate(nil) }) {
+                Button(action: { AppDelegate.quitImmediately() }) {
                     Text(L("退出", "Quit"))
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
@@ -230,6 +229,6 @@ struct MenuBarView: View {
     }
 
     private func openMainWindow() {
-        WindowManager.shared.openMainWindow(openWindowAction: openWindow)
+        WindowManager.shared.openMainWindow()
     }
 }

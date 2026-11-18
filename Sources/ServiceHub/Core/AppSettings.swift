@@ -51,7 +51,7 @@ public final class AppSettings: ObservableObject {
         }
     }
 
-    @Published public var hideDockIcon: Bool = UserDefaults.standard.bool(forKey: "hideDockIcon") {
+    @Published public var hideDockIcon: Bool = (UserDefaults.standard.object(forKey: "hideDockIcon") as? Bool) ?? true {
         didSet {
             UserDefaults.standard.set(hideDockIcon, forKey: "hideDockIcon")
         }
@@ -75,11 +75,6 @@ public final class AppSettings: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             self?.applyWindowAppearance()
         }
-        if hideDockIcon {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                self?.applyDockActivationPolicy()
-            }
-        }
     }
 
     public func applyWindowAppearance() {
@@ -94,28 +89,7 @@ public final class AppSettings: ObservableObject {
     }
 
     public func applyDockActivationPolicy() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            WindowManager.shared.isChangingActivationPolicy = true
-
-            let visibleWindows = NSApp.windows.filter { $0.isVisible && !($0 is NSPanel) }
-
-            if self.hideDockIcon {
-                NSApp.setActivationPolicy(.accessory)
-            } else {
-                NSApp.setActivationPolicy(.regular)
-            }
-
-            for win in visibleWindows {
-                win.makeKeyAndOrderFront(nil)
-                win.orderFrontRegardless()
-            }
-            NSApp.activate()
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                WindowManager.shared.isChangingActivationPolicy = false
-            }
-        }
+        WindowManager.shared.syncActivationPolicy()
     }
 
     public func setHideDockIcon(_ hide: Bool) -> Bool {
@@ -124,7 +98,7 @@ public final class AppSettings: ObservableObject {
         }
         if self.hideDockIcon != hide {
             self.hideDockIcon = hide
-            applyDockActivationPolicy()
+            WindowManager.shared.syncActivationPolicy()
         }
         return true
     }
@@ -135,6 +109,7 @@ public final class AppSettings: ObservableObject {
         }
         if self.showMenuBarIcon != show {
             self.showMenuBarIcon = show
+            WindowManager.shared.syncActivationPolicy()
         }
         return true
     }

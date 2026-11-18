@@ -2,9 +2,40 @@ import SwiftUI
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private static weak var shared: AppDelegate?
+    private static var bypassQuitConfirmation = false
+
+    private var termSignalSource: DispatchSourceSignal?
+    private var isShowingQuitAlert = false
+    private var shuttingDown = false
+
+    /// 菜单栏面板退出按钮或收到 SIGTERM 时直接退出，不再弹确认框
+    @MainActor
+    static func quitImmediately() {
+        bypassQuitConfirmation = true
+        if shared?.isShowingQuitAlert == true {
+            NSApp.abortModal()
+            return
+        }
+        NSApp.terminate(nil)
+    }
+
+    override init() {
+        super.init()
+        Self.shared = self
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         let pid = ProcessInfo.processInfo.processIdentifier
         AppLogger.log("[App] ServiceHub 进程启动就绪 (PID: \(pid))，日志写入: \(AppLogger.logFilePath)")
+
+        installSignalHandler()
+        MainActor.assumeIsolated {
+            WindowManager.shared.syncActivationPolicy()
+            if !AppSettings.shared.showMenuBarIcon {
+                WindowManager.shared.openMainWindow()
+            }
+        }
 
         Task { @MainActor in
             // 等待系统环境与首轮配置就绪，确保开机自启无论窗口是否显示均必定执行
@@ -13,6 +44,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             Supervisor.shared.checkUpdatesForAllServices()
+        }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        MainActor.assumeIsolated {
+            let skipConfirmation = Self.bypassQuitConfirmation
+                || shuttingDown
+                || QuitPrompt.isSystemSessionTermination(Self.currentQuitReason)
+            Self.bypassQuitConfirmation = false
+
+            if !skipConfirmation {
+                if isShowingQuitAlert {
+                    NSApp.activate()
+                    return .terminateCancel
+                }
+                if !confirmQuit() {
+                    return .terminateCancel
+                }
+            }
+            shuttingDown = true
+            CloudflareTunnelManager.shared.stopAllTunnels()
+            return .terminateNow
         }
     }
 
@@ -25,8 +78,90 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
-    func applicationDidResignActive(_ notification: Notification) {
-        WindowManager.shared.handleAppDidResignActive()
+    private func installSignalHandler() {
+        // 用空处理函数而非 SIG_IGN：避免子进程继承 SIG_IGN
+        signal(SIGTERM) { _ in }
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        source.setEventHandler {
+            MainActor.assumeIsolated { Self.quitImmediately() }
+        }
+        source.resume()
+        termSignalSource = source
+    }
+
+    private static var currentQuitReason: OSType? {
+        guard let event = NSAppleEventManager.shared().currentAppleEvent,
+              event.eventClass == AEEventClass(kCoreEventClass),
+              event.eventID == AEEventID(kAEQuitApplication)
+        else { return nil }
+        let descriptor = event.paramDescriptor(forKeyword: AEKeyword(kAEQuitReason))
+            ?? event.attributeDescriptor(forKeyword: AEKeyword(kAEQuitReason))
+        return descriptor?.typeCodeValue
+    }
+
+    @MainActor
+    private func confirmQuit() -> Bool {
+        for panel in NSApp.windows where panel.className.contains("MenuBarExtra") && panel.isVisible {
+            panel.orderOut(nil)
+        }
+
+        let hasMainWindow = WindowManager.shared.isMainWindowVisible
+        let hasOtherWindow = NSApp.windows.contains { win in
+            win !== WindowManager.shared.mainWindow
+                && (win.isVisible || win.isMiniaturized)
+                && !(win is NSPanel)
+                && !win.className.contains("MenuBarExtra")
+                && win.styleMask.contains(.titled)
+                && win.styleMask.contains(.closable)
+        }
+        let runningCount = Supervisor.shared.statuses.values.filter { $0 == .running }.count
+        let busyCount = Supervisor.shared.isBusy.values.filter { $0 }.count
+        let tunnelCount = ServiceStore.shared.services.filter {
+            CloudflareTunnelManager.shared.isTunnelActive(for: $0.id)
+        }.count
+
+        let prompt = QuitPrompt(
+            hasOpenWindow: hasMainWindow || hasOtherWindow,
+            onlyMainWindow: hasMainWindow && !hasOtherWindow,
+            showMenuBarIcon: AppSettings.shared.showMenuBarIcon,
+            runningCount: runningCount,
+            busyCount: busyCount,
+            tunnelCount: tunnelCount
+        )
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.icon = NSApp.applicationIconImage
+        alert.messageText = prompt.title
+        alert.informativeText = prompt.message
+        for option in prompt.options {
+            let button = alert.addButton(withTitle: option.title)
+            if option.isDestructive {
+                button.hasDestructiveAction = true
+            }
+            if option.action == .cancel {
+                button.keyEquivalent = "\u{1b}"
+            }
+        }
+
+        isShowingQuitAlert = true
+        defer { isShowingQuitAlert = false }
+        NSApp.activate()
+        let response = alert.runModal()
+        if Self.bypassQuitConfirmation {
+            Self.bypassQuitConfirmation = false
+            return true
+        }
+        switch prompt.action(for: response) {
+        case .quit:
+            return true
+        case .closeWindows:
+            WindowManager.shared.closeMainWindow()
+            WindowManager.shared.closeOtherRegularWindows()
+            return false
+        case .cancel:
+            return false
+        }
     }
 }
 
@@ -67,22 +202,6 @@ struct ServiceHubApp: App {
     }
 
     var body: some Scene {
-        // 主程序窗口
-        WindowGroup("ServiceHub", id: "main") {
-            MainWindow()
-                .preferredColorScheme(settings.appearanceMode.colorScheme)
-        }
-        .windowStyle(.hiddenTitleBar)
-        .commands {
-            SidebarCommands()
-        }
-
-        // 偏好设置窗口 (支持 ⌘,)
-        Settings {
-            SettingsView()
-                .preferredColorScheme(settings.appearanceMode.colorScheme)
-        }
-
         // 顶部菜单栏常驻图标 (使用黑白 Template 规范图标，支持安全防重绑定)
         MenuBarExtra(isInserted: safeMenuBarBinding) {
             MenuBarView()
@@ -91,6 +210,12 @@ struct ServiceHubApp: App {
             menuBarLabelView
         }
         .menuBarExtraStyle(.window)
+
+        // 偏好设置窗口 (支持 ⌘,)
+        Settings {
+            SettingsView()
+                .preferredColorScheme(settings.appearanceMode.colorScheme)
+        }
     }
 
     @ViewBuilder
@@ -131,5 +256,110 @@ struct ServiceHubApp: App {
             }
         }
         return nil
+    }
+}
+
+struct QuitPrompt: Equatable {
+    enum Action: Equatable {
+        case closeWindows
+        case quit
+        case cancel
+    }
+
+    struct Option: Equatable {
+        let title: String
+        let action: Action
+        var isDestructive = false
+    }
+
+    let title: String
+    let message: String
+    let options: [Option]
+
+    init(
+        hasOpenWindow: Bool,
+        onlyMainWindow: Bool,
+        showMenuBarIcon: Bool,
+        runningCount: Int,
+        busyCount: Int,
+        tunnelCount: Int
+    ) {
+        title = L("要退出 ServiceHub 吗？", "Quit ServiceHub?")
+        let quitTitle = L("退出 ServiceHub", "Quit ServiceHub")
+        let busyPrefix = busyCount > 0
+            ? L("当前有 \(busyCount) 个服务正在执行启停或操作，退出可能会中断该操作。\n\n",
+                "\(busyCount) service(s) currently have an operation in progress. Quitting may interrupt it.\n\n")
+            : ""
+
+        let monitoringSummary: String = {
+            if runningCount > 0 && tunnelCount > 0 {
+                return L(
+                    "退出应用将停止对 \(runningCount) 个运行中服务的守护监控，并切断 \(tunnelCount) 个公网映射。",
+                    "Quitting will stop monitoring \(runningCount) running service(s) and close \(tunnelCount) public tunnel(s)."
+                )
+            } else if runningCount > 0 {
+                return L(
+                    "退出应用将停止对 \(runningCount) 个运行中服务的守护监控。",
+                    "Quitting will stop monitoring \(runningCount) running service(s)."
+                )
+            } else if tunnelCount > 0 {
+                return L(
+                    "退出应用将切断 \(tunnelCount) 个公网映射。",
+                    "Quitting will close \(tunnelCount) public tunnel(s)."
+                )
+            } else {
+                return L(
+                    "退出后 ServiceHub 将从菜单栏移除。",
+                    "ServiceHub will be removed from the menu bar."
+                )
+            }
+        }()
+
+        if hasOpenWindow && showMenuBarIcon {
+            let closeTitle = onlyMainWindow
+                ? L("仅关闭主面板", "Close Panel Only")
+                : L("仅关闭窗口", "Close Windows Only")
+            let target = onlyMainWindow
+                ? L("主控制面板", "the main panel")
+                : L("当前窗口", "the open windows")
+
+            if runningCount > 0 || tunnelCount > 0 {
+                message = "\(busyPrefix)\(monitoringSummary)\n\n" + L(
+                    "如果只是想关掉\(target)，请选择「\(closeTitle)」，ServiceHub 会继续在菜单栏运行。",
+                    "If you only want to dismiss \(target), choose \"\(closeTitle)\" to keep ServiceHub running in the menu bar."
+                )
+            } else {
+                message = "\(busyPrefix)" + L(
+                    "如果只是想关掉\(target)，请选择「\(closeTitle)」，ServiceHub 会继续留在菜单栏。",
+                    "If you only want to dismiss \(target), choose \"\(closeTitle)\" to keep ServiceHub in the menu bar."
+                )
+            }
+
+            options = [
+                Option(title: closeTitle, action: .closeWindows),
+                Option(title: quitTitle, action: .quit, isDestructive: true),
+                Option(title: L("取消", "Cancel"), action: .cancel),
+            ]
+        } else {
+            message = "\(busyPrefix)\(monitoringSummary)"
+            options = [
+                Option(title: quitTitle, action: .quit, isDestructive: true),
+                Option(title: L("取消", "Cancel"), action: .cancel),
+            ]
+        }
+    }
+
+    func action(for response: NSApplication.ModalResponse) -> Action {
+        let index = response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
+        guard options.indices.contains(index) else { return .cancel }
+        return options[index].action
+    }
+
+    static func isSystemSessionTermination(_ reason: OSType?) -> Bool {
+        guard let reason else { return false }
+        return reason == OSType(kAELogOut)
+            || reason == OSType(kAEReallyLogOut)
+            || reason == OSType(kAEShowRestartDialog)
+            || reason == OSType(kAEShowShutdownDialog)
     }
 }

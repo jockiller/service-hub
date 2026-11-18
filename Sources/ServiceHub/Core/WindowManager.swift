@@ -5,26 +5,35 @@ import AppKit
 public final class WindowManager: NSObject, NSWindowDelegate {
     public static let shared = WindowManager()
 
-    public private(set) weak var mainWindow: NSWindow?
-    /// 标记是否正在切换激活策略，防止在开关切换过程中意外触发失去焦点关闭
-    public var isChangingActivationPolicy: Bool = false
+    public private(set) var mainWindow: NSWindow?
+    private var windowCloseObserver: NSObjectProtocol?
+
+    public var isMainWindowVisible: Bool {
+        guard let mainWindow else { return false }
+        return mainWindow.isVisible || mainWindow.isMiniaturized
+    }
 
     override private init() {
         super.init()
-    }
-
-    public func registerMainWindow(_ window: NSWindow) {
-        self.mainWindow = window
-        window.delegate = self
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        window.titlebarSeparatorStyle = .none
-        window.styleMask.insert(.fullSizeContentView)
-        window.isMovableByWindowBackground = true
-        alignTrafficLights(in: window)
+        windowCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let closingWindow = notification.object as? NSWindow
+            Task { @MainActor [weak self] in
+                self?.syncActivationPolicy(excluding: closingWindow)
+            }
+        }
     }
 
     public func windowDidResize(_ notification: Notification) {
+        if let window = notification.object as? NSWindow, window === mainWindow {
+            alignTrafficLights(in: window)
+        }
+    }
+
+    public func windowDidEndLiveResize(_ notification: Notification) {
         if let window = notification.object as? NSWindow, window === mainWindow {
             alignTrafficLights(in: window)
         }
@@ -42,121 +51,108 @@ public final class WindowManager: NSObject, NSWindowDelegate {
         }
     }
 
-    /// 当应用失去焦点时处理窗口自动隐藏（仅在「隐藏 Dock 图标」的附属模式下等待失去焦点后自动收起）
-    public func handleAppDidResignActive() {
-        guard !isChangingActivationPolicy else { return }
-        guard AppSettings.shared.hideDockIcon else { return }
+    /// 根据当前窗口可见性与设置同步 Dock 图标策略：
+    /// 有常规窗口打开时显示 Dock 图标（.regular）；主窗口关闭后，若开启了菜单栏图标与隐藏设置则退回 .accessory
+    public func syncActivationPolicy(excluding closingWindow: NSWindow? = nil) {
+        let settings = AppSettings.shared
+        let hasMain = mainWindow.map { $0 !== closingWindow && ($0.isVisible || $0.isMiniaturized) } ?? false
+        let hasOther = hasOtherVisibleRegularWindow(excluding: closingWindow)
+        let shouldBeRegular = !settings.showMenuBarIcon || !settings.hideDockIcon || hasMain || hasOther
+        let targetPolicy: NSApplication.ActivationPolicy = shouldBeRegular ? .regular : .accessory
+        if NSApp.activationPolicy() != targetPolicy {
+            NSApp.setActivationPolicy(targetPolicy)
+        }
+    }
 
-        // 如果当前有模态弹窗（如文件选择、确认对话框），不收起，避免中断用户操作
-        if NSApp.modalWindow != nil { return }
+    private func hasOtherVisibleRegularWindow(excluding target: NSWindow?) -> Bool {
+        NSApp.windows.contains { win in
+            win !== mainWindow &&
+            win !== target &&
+            (win.isVisible || win.isMiniaturized) &&
+            !(win is NSPanel) &&
+            !win.className.contains("MenuBarExtra") &&
+            win.styleMask.contains(.titled)
+        }
+    }
 
-        // 附属模式下主窗口失去焦点自动收起
-        if let window = mainWindow, window.isVisible {
-            window.orderOut(nil)
+    public func closeMainWindow() {
+        guard let window = mainWindow, window.isVisible || window.isMiniaturized else { return }
+        _ = windowShouldClose(window)
+    }
+
+    public func closeOtherRegularWindows() {
+        for win in NSApp.windows {
+            guard win !== mainWindow,
+                  win.isVisible || win.isMiniaturized,
+                  !(win is NSPanel),
+                  !win.className.contains("MenuBarExtra"),
+                  win.styleMask.contains(.titled),
+                  win.styleMask.contains(.closable) else { continue }
+            for sheet in win.sheets {
+                win.endSheet(sheet, returnCode: .cancel)
+            }
+            win.close()
         }
     }
 
     // MARK: - NSWindowDelegate
     /// 当开启了顶部状态栏常驻图标时，点击主窗口红叉按钮 (或按 ⌘W) 不销毁窗口，仅执行 orderOut 隐藏
-    /// 这样既保留了窗口的所有状态、滚动位置和搜索框输入，又能在点击「打开主控制面板」时 0 延迟秒开
+    /// 并按设置切回 .accessory 隐藏 Dock 图标，既保留窗口状态又能在下次打开时 0 延迟秒开
     public func windowShouldClose(_ sender: NSWindow) -> Bool {
-        if AppSettings.shared.showMenuBarIcon {
-            sender.orderOut(nil)
-            return false
+        for sheet in sender.sheets {
+            sender.endSheet(sheet, returnCode: .cancel)
         }
-        return true
+        sender.orderOut(nil)
+        syncActivationPolicy(excluding: sender)
+        return false
     }
 
-    /// 彻底唤起并置顶主控制面板窗口（完美适配 accessory 隐藏 Dock 模式，严格单窗口防重）
-    public func openMainWindow(openWindowAction: OpenWindowAction? = nil) {
-        // 1. 扫描 NSApp.windows，确保只保留唯一主窗口，清理任何可能出现的副本
-        var targetWindow: NSWindow? = mainWindow
-        var extraWindows: [NSWindow] = []
+    /// 彻底唤起并置顶主控制面板窗口（参考 gpt-load-mac：收起菜单栏弹窗、切到 .regular 显示 Dock、延后一拍激活置顶）
+    public func openMainWindow() {
+        let window = mainWindow ?? makeMainWindow()
 
-        for window in NSApp.windows {
-            if isMainWindowCandidate(window) {
-                if targetWindow == nil {
-                    targetWindow = window
-                } else if targetWindow !== window {
-                    extraWindows.append(window)
-                }
+        // 菜单栏面板不会因为本 App 的另一个窗口变成前台而自动收起，手动收掉
+        for panel in NSApp.windows where panel.className.contains("MenuBarExtra") && panel.isVisible {
+            panel.orderOut(nil)
+        }
+
+        // 切成普通 App 后要等下一轮再激活，否则窗口会落在当前前台 App 的下面
+        if NSApp.activationPolicy() != .regular {
+            NSApp.setActivationPolicy(.regular)
+        }
+
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let self, let window else { return }
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
             }
-        }
-
-        // 立即关闭任何多余的重复窗口
-        for extra in extraWindows {
-            extra.close()
-        }
-
-        if let window = targetWindow {
-            registerMainWindow(window)
-            bringWindowToFront(window)
-            return
-        }
-
-        // 2. 若窗口当前已被销毁或尚未初始化，调用 SwiftUI 的 openWindowAction 触发重建
-        openWindowAction?(id: "main")
-
-        // 3. 延迟一拍再次扫描并置顶新生成的窗口，同时再次清理冗余
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            guard let self = self else { return }
-            var first: NSWindow? = nil
-            for window in NSApp.windows {
-                if self.isMainWindowCandidate(window) {
-                    if first == nil {
-                        first = window
-                    } else {
-                        window.close()
-                    }
-                }
-            }
-            if let w = first {
-                self.registerMainWindow(w)
-                self.bringWindowToFront(w)
-            }
+            NSApp.activate()
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+            self.alignTrafficLights(in: window)
         }
     }
 
-    private func isMainWindowCandidate(_ window: NSWindow) -> Bool {
-        if window is NSPanel { return false }
-        let className = String(describing: type(of: window))
-        if className.contains("StatusBar") || className.contains("Popover") { return false }
-        return window.styleMask.contains(.titled)
-    }
-
-    private func bringWindowToFront(_ window: NSWindow) {
-        if window.isMiniaturized {
-            window.deminiaturize(nil)
-        }
-        window.makeKeyAndOrderFront(nil)
-        window.orderFrontRegardless()
-        NSApp.activate()
-    }
-}
-
-/// 帮助 SwiftUI 捕获底层 NSWindow 实例的微型透明组件
-public struct WindowAccessor: NSViewRepresentable {
-    let onWindow: (NSWindow) -> Void
-
-    public init(onWindow: @escaping (NSWindow) -> Void) {
-        self.onWindow = onWindow
-    }
-
-    public func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            if let window = view.window {
-                onWindow(window)
-            }
-        }
-        return view
-    }
-
-    public func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            if let window = nsView.window {
-                onWindow(window)
-            }
-        }
+    private func makeMainWindow() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1080, height: 720),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "ServiceHub"
+        window.isReleasedWhenClosed = false
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
+        window.isMovableByWindowBackground = true
+        window.minSize = NSSize(width: 860, height: 600)
+        window.delegate = self
+        window.contentView = NSHostingView(rootView: MainWindow())
+        window.center()
+        window.setFrameAutosaveName("ServiceHubMainWindow")
+        alignTrafficLights(in: window)
+        self.mainWindow = window
+        return window
     }
 }

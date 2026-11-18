@@ -90,7 +90,7 @@ struct SettingsView: View {
                         }
                     ))
 
-                    Toggle(L("隐藏 Dock 栏图标", "Hide Dock icon"), isOn: Binding(
+                    Toggle(L("关闭主窗口时隐藏 Dock 图标", "Hide Dock icon when main window closes"), isOn: Binding(
                         get: { settings.hideDockIcon },
                         set: {
                             if !settings.setHideDockIcon($0) {

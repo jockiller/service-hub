@@ -498,11 +498,7 @@ struct MainWindow: View {
             Alert(title: Text(L("提示", "Notice")), message: Text(alertMessage ?? ""), dismissButton: .default(Text(L("确定", "OK"))))
         }
         .frame(minWidth: 860, minHeight: 600)
-        .background(
-            WindowAccessor { window in
-                WindowManager.shared.registerMainWindow(window)
-            }
-        )
+        .preferredColorScheme(settings.appearanceMode.colorScheme)
     }
 
     private var isReorderingAllowed: Bool {

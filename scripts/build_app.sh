@@ -4,7 +4,7 @@ set -e
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$DIR"
 
-VERSION="${1:-1.9.1}"
+VERSION="${1:-1.9.2}"
 
 echo "==> 正在编译 ServiceHub (Release 优化模式)..."
 swift build -c release
@@ -51,6 +51,8 @@ cat << EOF > "$CONTENTS_DIR/Info.plist"
     <string>${VERSION}</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>LSUIElement</key>
+    <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>
