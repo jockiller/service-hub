@@ -48,10 +48,10 @@ jobs:
           一款专为 macOS 设计的现代化本地服务可视化管理工具与守护引擎。
           统一纳管 Shell 脚本、Homebrew 服务、macOS 原生应用程序 (.app) 与 Docker 容器。
 
-          #### ✨ 本次更新 (v${{ steps.get_version.outputs.VERSION }})
-          - 🪟 **全新菜单栏优先窗口生命周期**：启动时静默驻留顶部菜单栏（无初始弹窗与 Dock 图标），打开主控制面板时动态显示 Dock 图标并支持常规窗口切换，失去焦点不再自动隐藏。
-          - 🎯 **关闭主面板自动回退菜单栏**：点击关闭或 `⌘W` 时隐藏主面板保留状态，按设置自动隐藏 Dock 图标，再次唤起秒开。
-          - 🛡️ **Dock / `⌘Q` 退出确认保护**：从 Dock 右键退出或按 `⌘Q` 时弹出确认框，提供「仅关闭主面板」选项防止误关后台守护，菜单栏退出保持直退并在退出时清理活跃公网隧道。
+          #### 🛠️ 本次修复 (v${{ steps.get_version.outputs.VERSION }})
+          - 🔌 **修复系统关机 / 重启误弹退出确认框的问题**：补全 Apple Event 退出原因（`kAEShutDown`、`kAERestart`、`kAEQuitAll`）识别，系统关机或重启时不再弹出退出确认框阻塞关机流程。
+          - 🛡️ **新增 `NSWorkspace.willPowerOffNotification` 兜底监听**：在系统发起关机、重启或注销时自动跳过退出确认、立即关闭已打开的确认弹窗并清理活跃公网隧道。
+          - 🔍 **完善退出原因描述符解析**：优先读取 `kAEQuitReason` 属性并同时兼容 `enumCodeValue` 与 `typeCodeValue`，保留正常 `⌘Q` 与 Dock 手动退出时的保护弹窗。
 
           #### 📦 下载安装
           - **DMG 镜像 (推荐)**: 下载 `.dmg` 文件，双击打开并将 `ServiceHub` 拖入 `Applications` 应用程序文件夹即可。

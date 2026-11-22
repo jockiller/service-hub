@@ -6,7 +6,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static var bypassQuitConfirmation = false
 
     private var termSignalSource: DispatchSourceSignal?
+    private var workspacePowerOffObserver: NSObjectProtocol?
     private var isShowingQuitAlert = false
+    private var isSystemPoweringOff = false
     private var shuttingDown = false
 
     /// 菜单栏面板退出按钮或收到 SIGTERM 时直接退出，不再弹确认框
@@ -30,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppLogger.log("[App] ServiceHub 进程启动就绪 (PID: \(pid))，日志写入: \(AppLogger.logFilePath)")
 
         installSignalHandler()
+        installWorkspacePowerOffObserver()
         MainActor.assumeIsolated {
             WindowManager.shared.syncActivationPolicy()
             if !AppSettings.shared.showMenuBarIcon {
@@ -49,9 +52,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         MainActor.assumeIsolated {
+            let quitReason = Self.currentQuitReason
+            let isSystemSessionQuit = QuitPrompt.isSystemSessionTermination(quitReason)
             let skipConfirmation = Self.bypassQuitConfirmation
                 || shuttingDown
-                || QuitPrompt.isSystemSessionTermination(Self.currentQuitReason)
+                || isSystemPoweringOff
+                || isSystemSessionQuit
             Self.bypassQuitConfirmation = false
 
             if !skipConfirmation {
@@ -62,6 +68,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if !confirmQuit() {
                     return .terminateCancel
                 }
+            } else if isShowingQuitAlert {
+                NSApp.abortModal()
+            }
+            if isSystemSessionQuit && !shuttingDown {
+                AppLogger.log("[App] 收到系统会话退出事件 (reason=\(Self.fourCharString(quitReason)))，直接退出")
             }
             shuttingDown = true
             CloudflareTunnelManager.shared.stopAllTunnels()
@@ -89,14 +100,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         termSignalSource = source
     }
 
+    private func installWorkspacePowerOffObserver() {
+        workspacePowerOffObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willPowerOffNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { Self.handleSystemPowerOff() }
+        }
+    }
+
+    @MainActor
+    private static func handleSystemPowerOff() {
+        guard let delegate = shared else { return }
+        if !delegate.isSystemPoweringOff {
+            AppLogger.log("[App] 收到系统关机/重启/注销通知 (willPowerOffNotification)，跳过退出确认")
+        }
+        delegate.isSystemPoweringOff = true
+        CloudflareTunnelManager.shared.stopAllTunnels()
+        if delegate.isShowingQuitAlert {
+            NSApp.abortModal()
+        }
+    }
+
     private static var currentQuitReason: OSType? {
         guard let event = NSAppleEventManager.shared().currentAppleEvent,
               event.eventClass == AEEventClass(kCoreEventClass),
               event.eventID == AEEventID(kAEQuitApplication)
         else { return nil }
-        let descriptor = event.paramDescriptor(forKeyword: AEKeyword(kAEQuitReason))
-            ?? event.attributeDescriptor(forKeyword: AEKeyword(kAEQuitReason))
-        return descriptor?.typeCodeValue
+        let descriptor = event.attributeDescriptor(forKeyword: AEKeyword(kAEQuitReason))
+            ?? event.paramDescriptor(forKeyword: AEKeyword(kAEQuitReason))
+        guard let descriptor else { return nil }
+        let code = descriptor.enumCodeValue != 0 ? descriptor.enumCodeValue : descriptor.typeCodeValue
+        return code != 0 ? code : nil
+    }
+
+    private static func fourCharString(_ code: OSType?) -> String {
+        guard let code else { return "nil" }
+        let bytes: [UInt8] = [
+            UInt8((code >> 24) & 0xFF),
+            UInt8((code >> 16) & 0xFF),
+            UInt8((code >> 8) & 0xFF),
+            UInt8(code & 0xFF)
+        ]
+        if bytes.allSatisfy({ (0x20...0x7E).contains($0) }),
+           let str = String(bytes: bytes, encoding: .ascii) {
+            return "'\(str)'"
+        }
+        return String(format: "0x%08x", code)
     }
 
     @MainActor
@@ -148,7 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         defer { isShowingQuitAlert = false }
         NSApp.activate()
         let response = alert.runModal()
-        if Self.bypassQuitConfirmation {
+        if Self.bypassQuitConfirmation || shuttingDown || isSystemPoweringOff {
             Self.bypassQuitConfirmation = false
             return true
         }
@@ -357,7 +408,10 @@ struct QuitPrompt: Equatable {
 
     static func isSystemSessionTermination(_ reason: OSType?) -> Bool {
         guard let reason else { return false }
-        return reason == OSType(kAELogOut)
+        return reason == OSType(kAEShutDown)
+            || reason == OSType(kAERestart)
+            || reason == OSType(kAEQuitAll)
+            || reason == OSType(kAELogOut)
             || reason == OSType(kAEReallyLogOut)
             || reason == OSType(kAEShowRestartDialog)
             || reason == OSType(kAEShowShutdownDialog)
